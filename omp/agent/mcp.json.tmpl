@@ -1,0 +1,56 @@
+{
+  "$schema": "https://raw.githubusercontent.com/can1357/oh-my-pi/main/packages/coding-agent/src/config/mcp-schema.json",
+  "mcpServers": {
+    "gh_grep": {
+      "type": "http",
+      "url": "https://mcp.grep.app"
+    },
+    "mcp-server-git": {
+      "type": "stdio",
+      "command": "@AGENT_HOME@/.local/bin/uvx",
+      "args": [
+        "--default-index", "https://pypi.org/simple",
+        "--from", "git+https://github.com/modelcontextprotocol/servers.git#subdirectory=src/git",
+        "mcp-server-git"
+      ]
+    },
+    "doc-md-indexer": {
+      "type": "stdio",
+      "command": "@AGENT_HOME@/.venvs/doc-md-indexer/bin/python",
+      "args": ["@AGENT_DATA_ROOT@/mcps/doc-md-indexer/index.py"],
+      "env": {
+        "MD_INDEXER_ROOT": "@AGENT_DATA_ROOT@/DOCS"
+      }
+    },
+    "zai-vision": {
+      "type": "stdio",
+      "command": "/usr/bin/npx",
+      "args": ["-y", "@z_ai/mcp-server"],
+      "env": {
+        "Z_AI_API_KEY": "${ZAI_API_KEY}",
+        "Z_AI_MODE": "ZAI"
+      }
+    },
+    "web-search-prime": {
+      "type": "http",
+      "url": "https://api.z.ai/api/mcp/web_search_prime/mcp",
+      "headers": {
+        "Authorization": "Bearer ${ZAI_API_KEY}"
+      }
+    },
+    "web-reader": {
+      "type": "http",
+      "url": "https://api.z.ai/api/mcp/web_reader/mcp",
+      "headers": {
+        "Authorization": "Bearer ${ZAI_API_KEY}"
+      }
+    },
+    "zread": {
+      "type": "http",
+      "url": "https://api.z.ai/api/mcp/zread/mcp",
+      "headers": {
+        "Authorization": "Bearer ${ZAI_API_KEY}"
+      }
+    }
+  }
+}

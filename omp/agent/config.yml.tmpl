@@ -1,0 +1,121 @@
+providers:
+  webSearchOrder:
+    - zai
+    - duckduckgo
+    - perplexity
+    - gemini
+    - anthropic
+    - codex
+    - xai
+    - exa
+    - tinyfish
+    - jina
+    - kagi
+    - tavily
+    - firecrawl
+    - brave
+    - kimi
+    - parallel
+    - synthetic
+    - searxng
+    - startpage
+    - ecosia
+    - google
+    - mojeek
+    - public
+modelRoles:
+  smol: zai/glm-4.7-flash:high
+  tiny: zai/glm-4.7-flash:high
+  default: zai/glm-5.3-flash:high
+symbolPreset: unicode
+composer:
+  shape: claude
+theme:
+  dark: titanium
+  light: light
+setupVersion: 2
+memory:
+  backend: mnemopi
+plan:
+  enabled: true
+task:
+  eager: default
+  isolation:
+    mode: none
+sharpshooter:
+  model: ""
+autolearn:
+  enabled: false
+  autoContinue: true
+display:
+  showTokenUsage: false
+  cacheMissMarker: true
+  shimmer: kitt
+statusLine:
+  preset: custom
+  separator: slash
+  leftSegments:
+    - model
+    - mode
+    - path
+    - git
+    - pr
+    - subagents
+  rightSegments:
+    - cost
+    - context_pct
+    - cache_hit
+    - token_rate
+  segmentOptions:
+    model:
+      showThinkingLevel: true
+    path:
+      abbreviate: true
+      maxLength: 25
+      stripWorkPrefix: true
+    git:
+      showBranch: true
+      showStaged: false
+      showUnstaged: false
+      showUntracked: false
+    time:
+      format: 24h
+      showSeconds: false
+  sessionAccent: true
+  transparent: false
+  compactThinkingLevel: false
+  showHookStatus: true
+  contextLine: "off"
+astGrep:
+  enabled: true
+security:
+  enabled: true
+edit:
+  mode: hashline
+dev:
+  autoqa: false
+steeringMode: one-at-a-time
+interruptMode: immediate
+cycleOrder:
+  - smol
+  - default
+  - slow
+hideThinkingBlock: false
+disabledExtensions:
+  - skill:test-driven-development
+  - skill:requesting-code-review
+  - skill:receiving-code-review
+  - skill:finishing-a-development-branch
+  - skill:using-git-worktrees
+disabledProviders:
+  - opencode
+read:
+  renderMarkdown: true
+  summarize:
+    prose: true
+retry:
+  fallbackChains:
+    default:
+      - zai-balance/glm-5.3-flash
+extensions:
+  - @AGENT_HOME@/.omp/extensions/superpowers

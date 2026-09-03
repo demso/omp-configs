@@ -1,0 +1,3 @@
+[submodule "omp/extensions/superpowers"]
+	path = omp/extensions/superpowers
+	url = https://github.com/obra/superpowers

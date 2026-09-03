@@ -1,0 +1,14 @@
+providers:
+  zai-balance:
+    baseUrl: https://api.z.ai/api/paas/v4
+    api: openai-completions
+    apiKey: ZAI_API_KEY
+    models:
+      - id: glm-5.3-flash
+        name: GLM-5.3-Flash (z.ai balance)
+        contextWindow: 1000000
+        maxTokens: 131072
+      - id: glm-4.7-flash
+        name: GLM-4.7-Flash (z.ai balance)
+        contextWindow: 200000
+        maxTokens: 64000
