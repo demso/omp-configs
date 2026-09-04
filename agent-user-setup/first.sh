@@ -31,7 +31,7 @@ sudo -u "$SECOND_USERNAME" git config --global alias.tree 'log --graph --pretty=
 %C(blue)<%an>%Creset%d%n%s%n" --abbrev-commit --date=format-local:"%d-%m-%Y %H:%M"'
 sudo -u "$SECOND_USERNAME" git config --global alias.st status
 sudo -u "$SECOND_USERNAME" git config --global alias.c 'commit -m'
-
+sudo -u "$SECOND_USERNAME" git config --global init.defaultBranch main
 sudo -u "$SECOND_USERNAME" git config --global color.status always
 sudo -u "$SECOND_USERNAME" git config --global status.short false
 sudo -u "$SECOND_USERNAME" git config --global status.branch true
