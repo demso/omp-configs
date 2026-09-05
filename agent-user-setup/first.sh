@@ -1,7 +1,13 @@
-MAIN_USERNAME="user"
-SECOND_USERNAME="agent"
-GIT_NAME="Agent"
-GIT_EMAIL="agent@example.com"
+#MAIN_USERNAME="user"
+#SECOND_USERNAME="agent"
+#GIT_NAME="Agent"
+#GIT_EMAIL="agent@example.com"
+
+if [ -f .env ]; then
+    set -a             # Автоматически экспортировать все объявляемые переменные (короткий аналог set -o allexport)
+    source .env        # Считать файл конфигурации
+    set +a             # Отключить автоэкспорт
+fi
 
 # 1. Создание пользователя
 sudo useradd -m -s /bin/bash "$SECOND_USERNAME"

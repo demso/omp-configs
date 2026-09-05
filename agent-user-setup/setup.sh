@@ -34,6 +34,7 @@ APT_MIRROR="http://mirror.yandex.ru/ubuntu"
 PYPI_MIRROR="https://mirror.yandex.ru/pypi/web/simple/"
 NPM_REGISTRY="https://registry.npmmirror.com"
 APT_MIRROR="${APT_MIRROR%/}"   # защита от двойного слеша
+TZ_VALUE=Europe/Moscow
 
 # ---------- 1. Зеркала APT (deb822 и старый формат, с бэкапом .orig) ----------
 shopt -s nullglob
@@ -108,13 +109,11 @@ NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 
 # curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 # sudo apt-get install -y nodejs
 
-sudo apt-get clean   # vhdx WSL не сжимается сам — не храним кэш apt в образе
-
 # ---------- 3. Симлинки и время (только если бинари на месте) ----------
 command -v fdfind >/dev/null 2>&1 && sudo ln -sf "$(command -v fdfind)" /usr/local/bin/fd
 command -v batcat >/dev/null 2>&1 && sudo ln -sf "$(command -v batcat)" /usr/local/bin/bat
-
 sudo ln -snf "/usr/share/zoneinfo/${TZ_VALUE}" /etc/localtime
+
 echo "${TZ_VALUE}" | sudo tee /etc/timezone >/dev/null
 
 # ---------- 4. Bun и UV (в $HOME, без sudo) ----------
@@ -158,22 +157,42 @@ git lfs install
 # ---------- 8. ~/.bashrc: PATH, TZ, prompt (идемпотентно) ----------
 BASHRC="$HOME/.bashrc"
 if ! grep -q "DEV ENV BLOCK" "$BASHRC" 2>/dev/null; then
-  {
-    echo ''
-    echo '# ===== DEV ENV BLOCK ====='
-    echo "export TZ=\"${TZ_VALUE}\""
-    echo 'export DOTNET_ROOT="$HOME/.dotnet"'
-    echo 'export PATH="$HOME/.bun/bin:$HOME/.local/bin:$HOME/.dotnet:$HOME/.dotnet/tools:$PATH"'
-    echo 'PS1="\[\033[01;32m\][agent]\[\033[00m\] \[\033[01;34m\]\[\u@\h\]\[\033[00m\]\$ "'
-    echo 'export WINDOWS_HOST=$(ip route | grep default | awk \'{print $3}\')'
-    #echo export http_proxy=http://$WINDOWS_HOST:55366 
-    #echo export https_proxy=http://$WINDOWS_HOST:55366
-    #echo export no_proxy=localhost,127.0.0.1,*.local,10.*,172.*,192.168.*,*.keysystems.ru
-    echo '# ===== END DEV ENV BLOCK ====='
-  } >> "$BASHRC"
+  cat << EOF >> "$BASHRC"
+
+# ===== DEV ENV BLOCK =====
+export TZ="${TZ_VALUE}"
+export DOTNET_ROOT="\$HOME/.dotnet"
+export PATH="\$HOME/.bun/bin:\$HOME/.local/bin:\$HOME/.dotnet:\$HOME/.dotnet/tools:\$PATH"
+PS1="\[\033[01;32m\][agent]\[\033[00m\] \[\033[01;34m\]\u@\h\[\033[00m\]\\$ "
+export WINDOWS_HOST=\$(ip route show default | awk '/default/ {print \$3; exit}')
+#export http_proxy=http://\$WINDOWS_HOST:55366 
+#export https_proxy=http://\$WINDOWS_HOST:55366
+#export no_proxy=localhost,127.0.0.1,*.local,10.*,172.*,192.168.*,*.keysystems.ru
+# ===== END DEV ENV BLOCK =====
+EOF
 fi
 
 bun install -g @oh-my-pi/pi-coding-agent
+
+# ---------- 8.5. Очистка временных файлов и кэшей ----------
+echo "→ Очистка временных файлов..."
+
+# 1. Системные пакеты и неиспользуемые зависимости APT
+sudo apt-get autoremove -y --purge
+sudo apt-get clean
+sudo rm -rf /var/lib/apt/lists/*
+
+# 2. Кэши пользовательских пакетов (pip, uv, bun, npm)
+rm -rf ~/.cache/pip
+rm -rf ~/.cache/uv
+rm -rf ~/.bun/install/cache
+sudo npm cache clean --force 2>/dev/null || true
+
+# 3. Временные нугеты и файлы .NET
+dotnet nuget locals all --clear >/dev/null 2>&1 || true
+
+# 4. Временные системные файлы
+sudo rm -rf /tmp/* /var/tmp/*
 
 # ---------- 9. Проверка ----------
 echo

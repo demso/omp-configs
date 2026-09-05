@@ -1,17 +1,28 @@
-SECOND_USERNAME="agent"
+#SECOND_USERNAME="abobapc"
+#MAIN_USERNAME="abobapc"
+#WINDOWS_USER=""
+#sed -i 's/\r$//' second.sh
+
+if [ -f .env ]; then
+    set -a             # Автоматически экспортировать все объявляемые переменные (короткий аналог set -o allexport)
+    source .env        # Считать файл конфигурации
+    set +a             # Отключить автоэкспорт
+fi
 
 # Проверка текущих монтирований drvfs
 mount | grep drvfs
 ls -ld /mnt/c /mnt/d
 
 # Создание каталога и bind-mount для конфигурации Oh My Pi
-mkdir -p "/home/$SECOND_USERNAME/.omp"
-sudo mount --bind "/mnt/c/Users/$MAIN_USERNAME/.omp" "/home/$SECOND_USERNAME/.omp"
+sudo mkdir -p /mnt/c/Users/${WINDOWS_USERNAME}/.omp /mnt/c/Users/${WINDOWS_USERNAME}/.agents
+sudo mkdir -p /home/${SECOND_USERNAME}/.omp /home/${SECOND_USERNAME}/.agents
 
-# Запуск сторонних скриптов настройки
-sudo -v && bash setup.sh
+sudo chmod -R 777 "/mnt/c/Users/${WINDOWS_USERNAME}/.omp" "/mnt/c/Users/${WINDOWS_USERNAME}/.agents"
 
-# Перезапуск оболочки для обновления PATH и переменного окружения
-exec bash
+sudo mount --bind "/mnt/c/Users/$WINDOWS_USERNAME/.omp" "/home/$SECOND_USERNAME/.omp"
+sudo mount --bind "/mnt/c/Users/$WINDOWS_USERNAME/.agents" "/home/$SECOND_USERNAME/.agents"
 
-command -v python fd bat eza fzf rg jq git go psql node npm pnpm bun uv dotnet dotnet-ef csharp-ls
+# 6. Проверка результата
+findmnt -nT "/home/${SECOND_USERNAME}/.omp"
+findmnt -nT "/home/${SECOND_USERNAME}/.agents"
+
