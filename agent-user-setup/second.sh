@@ -9,7 +9,7 @@ mkdir -p "/home/$SECOND_USERNAME/.omp"
 sudo mount --bind "/mnt/c/Users/$MAIN_USERNAME/.omp" "/home/$SECOND_USERNAME/.omp"
 
 # Запуск сторонних скриптов настройки
-sudo -v && bash wsl-setup.sh
+sudo -v && bash setup.sh
 
 # Перезапуск оболочки для обновления PATH и переменного окружения
 exec bash
