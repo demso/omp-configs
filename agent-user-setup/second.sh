@@ -1,3 +1,5 @@
+SECOND_USERNAME="agent"
+
 # Проверка текущих монтирований drvfs
 mount | grep drvfs
 ls -ld /mnt/c /mnt/d
