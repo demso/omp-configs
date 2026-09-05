@@ -49,5 +49,10 @@ chmod 750 "/home/$MAIN_USERNAME"
 # Ограничение доступа к смонтированному диску C
 chmod 750 /mnt/c
 
+# Проверка разделения прав между пользователями
+sudo -u "$SECOND_USERNAME" ls /mnt/c || echo "Access denied as expected"
+sudo -u "$SECOND_USERNAME" touch /mnt/d/test && echo "Write access confirmed"
+sudo -u "$SECOND_USERNAME" rm /mnt/d/test
+
 # 9. Проверка
 getfacl "/home/$SECOND_USERNAME"
