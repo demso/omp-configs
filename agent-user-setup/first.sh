@@ -116,40 +116,59 @@ validate_identifiers() {
 install_dependencies() {
     log 'Установка системных зависимостей и инструментов'
 
-    if [[ ${MODE} != apply ]]; then
-        printf 'INFO: check mode; системные зависимости не изменяются.\n'
-        return
-    fi
-
-    export DEBIAN_FRONTEND=noninteractive
-    local apt_files f ls_package icu_package
+    local apt_files f ls_package icu_package package status missing_packages=()
+    local required_packages=(
+        acl build-essential ca-certificates curl wget unzip
+        git git-lfs python3 python3-dev python3-venv python3-pip
+        python-is-python3 nodejs npm fd-find bat fzf ripgrep jq
+        golang-go postgresql-client libssl-dev zlib1g-dev libffi-dev vim tree tzdata
+    )
     APT_MIRROR="${APT_MIRROR%/}"
-    shopt -s nullglob
-    apt_files=(/etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list)
-    for f in "${apt_files[@]}"; do
-        grep -qE '(ubuntu\.com|kernel\.org)/ubuntu' "${f}" 2>/dev/null || continue
-        [[ -e "${f}.orig" ]] || cp "${f}" "${f}.orig"
-        sed -i -E \
-            -e "s|https?://[^[:space:]/]*\.ubuntu\.com/ubuntu-ports/?|${APT_MIRROR}-ports/|g" \
-            -e "s|https?://[^[:space:]/]*\.kernel\.org/ubuntu-ports/?|${APT_MIRROR}-ports/|g" \
-            -e "s|https?://[^[:space:]/]*\.ubuntu\.com/ubuntu/?|${APT_MIRROR}/|g" \
-            -e "s|https?://[^[:space:]/]*\.kernel\.org/ubuntu/?|${APT_MIRROR}/|g" \
-            "${f}"
-    done
-    shopt -u nullglob
-    printf 'Acquire::Retries "5";\nAcquire::http::Timeout "60";\nAcquire::https::Timeout "60";\n' > /etc/apt/apt.conf.d/99retry
-    apt-get update
-    if apt-get install --dry-run exa >/dev/null 2>&1; then
+    if apt-cache show exa >/dev/null 2>&1; then
         ls_package=exa
     else
         ls_package=eza
     fi
+    required_packages+=("${ls_package}")
+
+    if [[ ${MODE} != apply ]]; then
+        for package in "${required_packages[@]}"; do
+            status="$(dpkg-query -W -f='${db:Status-Abbrev}' "${package}" 2>/dev/null || true)"
+            [[ ${status} == 'ii '* ]] || missing_packages+=("${package}")
+        done
+        if (( ${#missing_packages[@]} )); then
+            printf 'WARNING: отсутствуют пакеты: %s\n' "${missing_packages[*]}"
+        else
+            printf 'INFO: системные пакеты установлены.\n'
+        fi
+        command -v fdfind >/dev/null 2>&1 || printf 'WARNING: команда fdfind не найдена.\n'
+        command -v batcat >/dev/null 2>&1 || printf 'WARNING: команда batcat не найдена.\n'
+        return
+    fi
+
+    export DEBIAN_FRONTEND=noninteractive
+    shopt -s nullglob
+    apt_files=(/etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list)
+    for f in "${apt_files[@]}"; do
+        # Already configured mirrors are deliberately left untouched.  This
+        # keeps apply idempotent and prevents .orig.orig files.
+        if grep -qE "https?://([^[:space:]/]+\\.)?(ubuntu\\.com|kernel\\.org)/ubuntu" "${f}" 2>/dev/null; then
+            [[ -e "${f}.orig" ]] || cp "${f}" "${f}.orig"
+            sed -i -E \
+                -e "s|https?://[^[:space:]/]*\\.ubuntu\\.com/ubuntu-ports/?|${APT_MIRROR}-ports/|g" \
+                -e "s|https?://[^[:space:]/]*\\.kernel\\.org/ubuntu-ports/?|${APT_MIRROR}-ports/|g" \
+                -e "s|https?://[^[:space:]/]*\\.ubuntu\\.com/ubuntu/?|${APT_MIRROR}/|g" \
+                -e "s|https?://[^[:space:]/]*\\.kernel\\.org/ubuntu/?|${APT_MIRROR}/|g" \
+                "${f}"
+        elif grep -Fq "${APT_MIRROR}" "${f}" 2>/dev/null; then
+            printf 'INFO: APT mirror already configured in %s.\n' "${f}"
+        fi
+    done
+    shopt -u nullglob
+    printf 'Acquire::Retries "5";\nAcquire::http::Timeout "60";\nAcquire::https::Timeout "60";\n' > /etc/apt/apt.conf.d/99retry
+    apt-get update
     apt-get install -y --no-install-recommends \
-        acl build-essential ca-certificates curl wget unzip \
-        git git-lfs python3 python3-dev python3-venv python3-pip \
-        python-is-python3 nodejs npm fd-find bat fzf ripgrep jq \
-        "${ls_package}" golang-go postgresql-client \
-        libssl-dev zlib1g-dev libffi-dev vim tree tzdata
+        "${required_packages[@]}"
     icu_package="$(apt-cache search --names-only '^libicu[0-9]+$' | awk '{print $1}' | sort -V | tail -n1)"
     if [[ -n ${icu_package} ]] && apt-get install --dry-run "${icu_package}" >/dev/null 2>&1; then
         apt-get install -y "${icu_package}"
@@ -174,23 +193,28 @@ ensure_users() {
         fi
     elif [[ ${MODE} == apply ]]; then
         useradd --create-home --shell /bin/bash "${SECOND_USERNAME}"
+        printf 'INFO: пользователь создан; следующий шаг — единственная интерактивная операция: задайте ему пароль.\n'
         passwd "${SECOND_USERNAME}"
     else
-        die "агентский пользователь не найден: ${SECOND_USERNAME}"
+        printf 'WARNING: агентский пользователь не найден: %s\n' "${SECOND_USERNAME}"
     fi
 }
 
 
 remove_agent_sudo() {
-    log "Удаление sudo-доступа у ${SECOND_USERNAME}"
+    log "Проверка sudo-доступа у ${SECOND_USERNAME}"
+    local sudoers_file="/etc/sudoers.d/${SECOND_USERNAME}"
     if [[ ${MODE} != apply ]]; then
-        printf 'INFO: check mode; sudo-конфигурация не изменяется.\n'
+        [[ ! -e ${sudoers_file} ]] || printf 'WARNING: найден sudoers-файл: %s\n' "${sudoers_file}"
+        if getent group sudo >/dev/null 2>&1 && id -nG "${SECOND_USERNAME}" | grep -qw sudo; then
+            printf 'WARNING: %s состоит в группе sudo.\n' "${SECOND_USERNAME}"
+        fi
         return
     fi
     if getent group sudo >/dev/null 2>&1; then
         gpasswd --delete "${SECOND_USERNAME}" sudo >/dev/null 2>&1 || true
     fi
-    rm -f "/etc/sudoers.d/${SECOND_USERNAME}"
+    rm -f "${sudoers_file}"
     if command -v visudo >/dev/null 2>&1; then
         visudo --check
     fi
@@ -258,8 +282,6 @@ require_c_mount() {
 
     main_uid="$(id --user "${MAIN_USERNAME}")"
     main_gid="$(id --group "${MAIN_USERNAME}")"
-    [[ ",${options}," == *",uid=${main_uid},"* ]] ||
-        die "uid монтирования ${C_MOUNT} не совпадает с UID ${MAIN_USERNAME} (${main_uid})"
     [[ ",${options}," == *",gid=${main_gid},"* ]] ||
         die "gid монтирования ${C_MOUNT} не совпадает с GID ${MAIN_USERNAME} (${main_gid})"
 }
@@ -288,31 +310,46 @@ validate_allowed_paths() {
 
 apply_share_acl() {
     log 'Настройка прав выбранных каталогов C:'
-    if [[ ${MODE} != apply ]]; then
-        printf 'INFO: check mode; права выбранных каталогов не изменяются.\n'
-        return
-    fi
-    local path
+    local path owner mode drift
     for path in "${C_ALLOWED_PATHS[@]}"; do
+        owner="$(stat --format='%U:%G' "${path}")"
+        mode="$(stat --format='%a' "${path}")"
+        drift=0
+        [[ ${owner} == "${MAIN_USERNAME}:${SHARE_GROUP}" ]] || drift=1
+        [[ ${mode} == 770 || ${mode} == 2770 ]] || drift=1
+        if [[ ${MODE} != apply ]]; then
+            if (( drift )); then
+                printf 'WARNING: drift ACL/ownership для %s (owner=%s mode=%s)\n' "${path}" "${owner}" "${mode}"
+            else
+                printf 'INFO: ACL/ownership в порядке: %s\n' "${path}"
+            fi
+            continue
+        fi
         find "${path}" -xdev -exec chown "${MAIN_USERNAME}:${SHARE_GROUP}" {} +
         find "${path}" -xdev -type d -exec chmod u+rwx,g+rwx,o-rwx {} +
         find "${path}" -xdev -type f -exec chmod u+rw,g+rw,o-rwx {} +
         find "${path}" -xdev -type d -exec chmod g+s {} +
     done
-    chmod 700 "${C_MOUNT}"
+    if [[ ${MODE} == apply ]]; then
+        chmod 700 "${C_MOUNT}"
+    fi
 }
 
 
 unmount_existing_targets() {
-    log 'Очистка старых bind-монтирований'
-    if [[ ${MODE} != apply ]]; then
-        printf 'INFO: check mode; существующие bind-монтирования не изменяются.\n'
-        return
-    fi
+    log 'Проверка старых bind-монтирований'
     local path
     for path in "${AGENT_MOUNT_TARGETS[@]}"; do
         if mountpoint --quiet "${path}"; then
-            umount "${path}"
+            if [[ ${MODE} == apply ]]; then
+                # Only configured targets are ever eligible for unmount.
+                umount "${path}"
+                printf 'INFO: размонтировано: %s\n' "${path}"
+            else
+                printf 'WARNING: точка уже смонтирована (будет перепроверена сервисом): %s\n' "${path}"
+            fi
+        else
+            printf 'INFO: точка не смонтирована: %s\n' "${path}"
         fi
     done
 }
@@ -322,6 +359,8 @@ prepare_agent_home() {
     log 'Подготовка домашнего каталога agent'
     [[ -d ${AGENT_HOME} ]] || die "домашний каталог не найден: ${AGENT_HOME}"
     if [[ ${MODE} != apply ]]; then
+        [[ $(stat --format='%a' "${AGENT_HOME}") == 710 ]] ||
+            printf 'WARNING: режим домашнего каталога отличается от 710: %s\n' "${AGENT_HOME}"
         printf 'INFO: check mode; домашний каталог не изменяется.\n'
         return
     fi
@@ -329,20 +368,15 @@ prepare_agent_home() {
     agent_group="$(id --group --name "${SECOND_USERNAME}")"
     chown root:"${agent_group}" "${AGENT_HOME}"
     chmod 710 "${AGENT_HOME}"
-    setfacl --modify \
-        "u:${MAIN_USERNAME}:rwx,g::--x,m::rwx,o::---" \
-        "${AGENT_HOME}"
-    setfacl --modify \
-        "d:u:${MAIN_USERNAME}:rwx,d:g::--x,d:m::rwx,d:o::---" \
-        "${AGENT_HOME}"
+    setfacl --modify "u:${MAIN_USERNAME}:rwx,g::--x,m::rwx,o::---" "${AGENT_HOME}"
+    setfacl --modify "d:u:${MAIN_USERNAME}:rwx,d:g::--x,d:m::rwx,d:o::---" "${AGENT_HOME}"
     find "${AGENT_HOME}" -xdev \
         -path "${AGENT_HOME}/.omp" -prune -o \
         -path "${AGENT_HOME}/.agents" -prune -o \
         -path "${AGENT_HOME}/shared" -prune -o \
         -exec setfacl --modify "u:${MAIN_USERNAME}:rwX,m::rwX,o::---" {} +
     local path
-    install --directory --owner="${SECOND_USERNAME}" --group="${agent_group}" \
-        --mode=700 \
+    install --directory --owner="${SECOND_USERNAME}" --group="${agent_group}" --mode=700 \
         "${AGENT_HOME}/.config" "${AGENT_HOME}/.cache" "${AGENT_HOME}/.local" "${AGENT_HOME}/work"
     for path in "${AGENT_HOME}/.config" "${AGENT_HOME}/.cache" "${AGENT_HOME}/.local" "${AGENT_HOME}/work"; do
         setfacl --modify "u:${MAIN_USERNAME}:rwx,m::rwx" "${path}"
@@ -380,16 +414,11 @@ configure_git() {
     configure_git_for_user "${SECOND_USERNAME}"
 }
 
-
 install_mount_script() {
     log 'Установка root-скрипта bind-монтирования'
-    if [[ ${MODE} != apply ]]; then
-        [[ -x /usr/local/sbin/agent-wsl-mounts ]] ||
-            printf 'WARNING: root-скрипт bind-монтирования ещё не установлен.\n' >&2
-        return
-    fi
-    local script_path=/usr/local/sbin/agent-wsl-mounts
-    cat > "${script_path}" <<EOF
+    local script_path=/usr/local/sbin/agent-wsl-mounts tmp
+    tmp="$(mktemp)"
+    cat > "${tmp}" <<EOF
 #!/usr/bin/env bash
 
 set -Eeuo pipefail
@@ -401,49 +430,43 @@ SOURCE_PATHS=(
     "${C_ALLOWED_PATHS[2]}"
     "${C_ALLOWED_PATHS[3]}"
 )
-
 TARGET_PATHS=(
     "${AGENT_MOUNT_TARGETS[0]}"
     "${AGENT_MOUNT_TARGETS[1]}"
     "${AGENT_MOUNT_TARGETS[2]}"
     "${AGENT_MOUNT_TARGETS[3]}"
 )
-
 [[ \${#SOURCE_PATHS[@]} -eq \${#TARGET_PATHS[@]} ]] || exit 1
-
 mount_one() {
-    local source="\$1"
-    local target="\$2"
-    [[ -d "\$source" ]] || {
-        printf 'Source directory does not exist: %s\\n' "\$source" >&2
-        return 1
-    }
-    [[ -d "\$target" && ! -L "\$target" ]] || {
-        printf 'Invalid mount target: %s\\n' "\$target" >&2
-        return 1
-    }
+    local source="\$1" target="\$2"
+    [[ -d "\$source" ]] || { printf 'Source directory does not exist: %s\\n' "\$source" >&2; return 1; }
+    [[ -d "\$target" && ! -L "\$target" ]] || { printf 'Invalid mount target: %s\\n' "\$target" >&2; return 1; }
     if mountpoint --quiet "\$target"; then return 0; fi
     mount --bind "\$source" "\$target"
 }
-
 chmod 700 /mnt/c
 for index in "\${!SOURCE_PATHS[@]}"; do
     mount_one "\${SOURCE_PATHS[\$index]}" "\${TARGET_PATHS[\$index]}"
 done
 EOF
-    chown root:root "${script_path}"
-    chmod 700 "${script_path}"
+    if [[ ${MODE} == check ]]; then
+        if [[ -f ${script_path} ]] && cmp -s "${tmp}" "${script_path}"; then
+            printf 'INFO: root-скрипт актуален.\n'
+        else
+            printf 'WARNING: root-скрипт отсутствует или требует обновления: %s\n' "${script_path}"
+        fi
+    elif [[ ! -f ${script_path} ]] || ! cmp -s "${tmp}" "${script_path}"; then
+        install -o root -g root -m 700 "${tmp}" "${script_path}"
+    fi
+    rm -f "${tmp}"
 }
 
 
 install_systemd_unit() {
     log 'Установка systemd-сервиса bind-монтирования'
-    if [[ ${MODE} != apply ]]; then
-        [[ -f /etc/systemd/system/agent-wsl-mounts.service ]] ||
-            printf 'WARNING: systemd-сервис bind-монтирования ещё не установлен.\n' >&2
-        return
-    fi
-    cat > /etc/systemd/system/agent-wsl-mounts.service <<'EOF'
+    local unit_path=/etc/systemd/system/agent-wsl-mounts.service tmp
+    tmp="$(mktemp)"
+    cat > "${tmp}" <<'EOF'
 [Unit]
 Description=Mount selected Windows directories for agent
 After=local-fs.target
@@ -457,10 +480,20 @@ RemainAfterExit=yes
 [Install]
 WantedBy=multi-user.target
 EOF
-    chmod 644 /etc/systemd/system/agent-wsl-mounts.service
-    if [[ -d /run/systemd/system ]]; then
+    if [[ -f ${unit_path} ]] && cmp -s "${tmp}" "${unit_path}"; then
+        printf 'INFO: systemd unit актуален.\n'
+    elif [[ ${MODE} == apply ]]; then
+        install -o root -g root -m 644 "${tmp}" "${unit_path}"
+    else
+        printf 'WARNING: systemd unit отсутствует или требует обновления.\n'
+    fi
+    rm -f "${tmp}"
+    if [[ ${MODE} == apply && -d /run/systemd/system ]]; then
         systemctl daemon-reload
         systemctl enable agent-wsl-mounts.service
+    elif [[ ${MODE} == check ]]; then
+        systemctl is-enabled agent-wsl-mounts.service >/dev/null 2>&1 ||
+            printf 'WARNING: systemd unit не включён.\n'
     else
         printf 'INFO: systemd не запущен; сервис будет активирован после перезапуска WSL.\n'
     fi
@@ -469,8 +502,15 @@ EOF
 
 start_mount_service_if_possible() {
     log 'Проверка bind-монтирований'
+    local path
     if [[ ${MODE} != apply ]]; then
-        printf 'INFO: check mode; mount-сервис не запускается.\n'
+        if [[ -d /run/systemd/system ]]; then
+            systemctl is-enabled agent-wsl-mounts.service >/dev/null 2>&1 ||
+                printf 'WARNING: mount-сервис не включён.\n'
+        fi
+        for path in "${AGENT_MOUNT_TARGETS[@]}"; do
+            mountpoint --quiet "${path}" || printf 'WARNING: каталог не смонтирован: %s\n' "${path}"
+        done
         return
     fi
     if [[ ! -d /run/systemd/system ]]; then
@@ -478,7 +518,6 @@ start_mount_service_if_possible() {
         return
     fi
     systemctl start agent-wsl-mounts.service
-    local path
     for path in "${AGENT_MOUNT_TARGETS[@]}"; do
         mountpoint --quiet "${path}" || die "каталог не смонтирован: ${path}"
     done
