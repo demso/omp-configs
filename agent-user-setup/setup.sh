@@ -53,20 +53,105 @@ fi
 
 echo "→ ls-инструмент: ${LS_PKG}"
 
-# In check mode, report the expected user tools and return without network or writes.
+# In check mode, report the expected user tools and config contents without
+# invoking installers or changing any files.
 if [[ ${MODE} == check ]]; then
   export PATH="$HOME/.bun/bin:$HOME/.local/bin:$HOME/.dotnet:$HOME/.dotnet/tools:$PATH"
-  for c in python fd bat fzf rg eza jq git go psql node npm pnpm bun uv dotnet dotnet-ef csharp-ls; do
+  for c in python fd bat fzf rg "${LS_PKG}" jq git go psql node npm pnpm bun uv dotnet dotnet-ef csharp-ls; do
     p="$(command -v "$c" 2>/dev/null || true)"
     printf '  %-24s %s\n' "$c" "${p:-НЕ НАЙДЕН}"
   done
-  [[ -f "$HOME/.config/pip/pip.conf" ]] || printf 'WARNING: отсутствует %s\n' "$HOME/.config/pip/pip.conf" >&2
-  [[ -f "$HOME/.config/uv/uv.toml" ]] || printf 'WARNING: отсутствует %s\n' "$HOME/.config/uv/uv.toml" >&2
-  [[ -f "$HOME/.bashrc" ]] && grep -q 'DEV ENV BLOCK' "$HOME/.bashrc" ||
-    printf 'WARNING: DEV ENV BLOCK отсутствует в %s\n' "$HOME/.bashrc" >&2
+
+  PIP_CONF="$HOME/.config/pip/pip.conf"
+  if [[ ! -f "$PIP_CONF" ]] ||
+     ! grep -Fqx -- '[global]' "$PIP_CONF" 2>/dev/null ||
+     ! grep -Fqx -- "index-url = ${PYPI_MIRROR}" "$PIP_CONF" 2>/dev/null; then
+    printf 'WARNING: отсутствует или отличается %s\n' "$PIP_CONF" >&2
+  fi
+
+  UV_CONF="$HOME/.config/uv/uv.toml"
+  if [[ ! -f "$UV_CONF" ]] ||
+     ! grep -Fqx -- '[[index]]' "$UV_CONF" 2>/dev/null ||
+     ! grep -Fqx -- "url = \"${PYPI_MIRROR}\"" "$UV_CONF" 2>/dev/null ||
+     ! grep -Fqx -- 'default = true' "$UV_CONF" 2>/dev/null; then
+    printf 'WARNING: отсутствует или отличается %s\n' "$UV_CONF" >&2
+  fi
+
+  BASHRC="$HOME/.bashrc"
+  if [[ ! -f "$BASHRC" ]] ||
+     ! grep -Fqx -- '# ===== DEV ENV BLOCK =====' "$BASHRC" 2>/dev/null ||
+     ! grep -Fqx -- "export TZ=\"${TZ_VALUE}\"" "$BASHRC" 2>/dev/null ||
+     ! grep -Fqx -- 'export DOTNET_ROOT="$HOME/.dotnet"' "$BASHRC" 2>/dev/null ||
+     ! grep -Fqx -- 'export PATH="$HOME/.bun/bin:$HOME/.local/bin:$HOME/.dotnet:$HOME/.dotnet/tools:$PATH"' "$BASHRC" 2>/dev/null ||
+     ! grep -Fqx -- 'PS1="\[\033[01;32m\][agent]\[\033[00m\] \[\033[01;34m\][\u@\h]\[\033[00m\]\$ "' "$BASHRC" 2>/dev/null ||
+     ! grep -Fqx -- 'export WINDOWS_HOST=$(ip route | grep default | awk '\''{print $3}'\'')' "$BASHRC" 2>/dev/null ||
+     ! grep -Fqx -- '# ===== END DEV ENV BLOCK =====' "$BASHRC" 2>/dev/null; then
+    printf 'WARNING: отсутствует или отличается DEV ENV BLOCK в %s\n' "$BASHRC" >&2
+  fi
   exit 0
 fi
 
+# The remaining operations are apply-only.  Temporary files are created in
+# HOME so every write remains user-scoped, and unchanged files keep their
+# existing contents and timestamps.
+write_if_changed() {
+  local target="$1" tmp
+  tmp="$(mktemp "${target}.tmp.XXXXXX")"
+  cat > "$tmp"
+  if [[ -f "$target" ]] && cmp -s "$tmp" "$target"; then
+    rm -f "$tmp"
+    return 0
+  fi
+  if [[ -e "$target" ]]; then
+    chmod --reference="$target" "$tmp"
+  else
+    chmod 0644 "$tmp"
+  fi
+  mv -f "$tmp" "$target"
+}
+
+write_bashrc_if_changed() {
+  local target="$HOME/.bashrc" block candidate
+  block="$(mktemp "$HOME/.dev-env-block.XXXXXX")"
+  candidate="$(mktemp "$HOME/.bashrc.tmp.XXXXXX")"
+
+  cat > "$block" <<EOF
+# ===== DEV ENV BLOCK =====
+export TZ="${TZ_VALUE}"
+export DOTNET_ROOT="\$HOME/.dotnet"
+export PATH="\$HOME/.bun/bin:\$HOME/.local/bin:\$HOME/.dotnet:\$HOME/.dotnet/tools:\$PATH"
+PS1="\[\033[01;32m\][agent]\[\033[00m\] \[\033[01;34m\][\u@\h]\[\033[00m\]\$ "
+export WINDOWS_HOST=\$(ip route | grep default | awk '{print \$3}')
+#echo export http_proxy=http://\$WINDOWS_HOST:55366
+#echo export https_proxy=http://\$WINDOWS_HOST:55366
+#echo export no_proxy=localhost,127.0.0.1,*.local,10.*,172.*,192.168.*,*.keysystems.ru
+# ===== END DEV ENV BLOCK =====
+EOF
+
+  if [[ -f "$target" ]]; then
+    awk '
+      $0 == "# ===== DEV ENV BLOCK =====" { in_block = 1; next }
+      in_block && $0 == "# ===== END DEV ENV BLOCK =====" { in_block = 0; next }
+      !in_block { print }
+    ' "$target" > "$candidate"
+  fi
+  if [[ -s "$candidate" ]] && [[ "$(tail -c 1 "$candidate")" != $'\n' ]]; then
+    printf '\n' >> "$candidate"
+  fi
+  cat "$block" >> "$candidate"
+
+  if [[ -f "$target" ]] && cmp -s "$candidate" "$target"; then
+    rm -f "$block" "$candidate"
+    return 0
+  fi
+  if [[ -e "$target" ]]; then
+    chmod --reference="$target" "$candidate"
+  else
+    chmod 0644 "$candidate"
+  fi
+  rm -f "$block"
+  mv -f "$candidate" "$target"
+}
 # ---------- 2. Bun и UV (в $HOME, без sudo) ----------
 # установщики сами допишут PATH в ~/.bashrc.
 curl -fsSL https://bun.sh/install | bash
@@ -90,12 +175,12 @@ npm install --global --registry="${NPM_REGISTRY}" \
   yaml-language-server pnpm vscode-langservers-extracted
 
 # ---------- 5. Зеркала pip/uv (конфиги пользователя вместо ENV) ----------
-mkdir -p ~/.config/pip ~/.config/uv
-cat > ~/.config/pip/pip.conf <<EOF
+mkdir -p "$HOME/.config/pip" "$HOME/.config/uv"
+write_if_changed "$HOME/.config/pip/pip.conf" <<EOF
 [global]
 index-url = ${PYPI_MIRROR}
 EOF
-cat > ~/.config/uv/uv.toml <<EOF
+write_if_changed "$HOME/.config/uv/uv.toml" <<EOF
 [[index]]
 url = "${PYPI_MIRROR}"
 default = true
@@ -104,22 +189,7 @@ EOF
 git lfs install
 
 # ---------- 8. ~/.bashrc: PATH, TZ, prompt (идемпотентно) ----------
-BASHRC="$HOME/.bashrc"
-if ! grep -q "DEV ENV BLOCK" "$BASHRC" 2>/dev/null; then
-  {
-    echo ''
-    echo '# ===== DEV ENV BLOCK ====='
-    echo "export TZ=\"${TZ_VALUE}\""
-    echo 'export DOTNET_ROOT="$HOME/.dotnet"'
-    echo 'export PATH="$HOME/.bun/bin:$HOME/.local/bin:$HOME/.dotnet:$HOME/.dotnet/tools:$PATH"'
-    echo 'PS1="\[\033[01;32m\][agent]\[\033[00m\] \[\033[01;34m\]\[\u@\h\]\[\033[00m\]\$ "'
-    printf '%s\n' 'export WINDOWS_HOST=$(ip route | grep default | awk '\''{print $3}'\'')'
-    #echo export http_proxy=http://$WINDOWS_HOST:55366 
-    #echo export https_proxy=http://$WINDOWS_HOST:55366
-    #echo export no_proxy=localhost,127.0.0.1,*.local,10.*,172.*,192.168.*,*.keysystems.ru
-    echo '# ===== END DEV ENV BLOCK ====='
-  } >> "$BASHRC"
-fi
+write_bashrc_if_changed
 
 bun install -g @oh-my-pi/pi-coding-agent
 
