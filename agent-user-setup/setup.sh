@@ -2,6 +2,16 @@
 
 # setup.sh устанавливает пользовательские инструменты в HOME текущего пользователя.
 set -euo pipefail
+MODE="${1:-check}"
+if (( $# > 1 )); then
+  printf 'Usage: %s [check|apply]\n' "$0" >&2
+  exit 2
+fi
+case "${MODE}" in
+  check|apply) ;;
+  *) printf 'Usage: %s [check|apply]\n' "$0" >&2; exit 2 ;;
+esac
+
 
 CONFIG_FILE="/etc/agent-setup.conf"
 if [ ! -r "${CONFIG_FILE}" ]; then
@@ -12,7 +22,6 @@ fi
 source "${CONFIG_FILE}"
 
 : "${SECOND_USERNAME:?SECOND_USERNAME не задан}"
-: "${APT_MIRROR:?APT_MIRROR не задан}"
 : "${PYPI_MIRROR:?PYPI_MIRROR не задан}"
 : "${NPM_REGISTRY:?NPM_REGISTRY не задан}"
 : "${TZ_VALUE:?TZ_VALUE не задан}"
@@ -28,7 +37,6 @@ if [ "$(id -un)" != "${SECOND_USERNAME}" ]; then
 fi
 
 # ===== Настройки =====
-APT_MIRROR="${APT_MIRROR%/}"   # защита от двойного слеша
 
 # APT и системные пакеты устанавливаются отдельным root-скриптом.
 # setup.sh работает только в HOME пользователя ${SECOND_USERNAME}.
@@ -44,6 +52,20 @@ else
 fi
 
 echo "→ ls-инструмент: ${LS_PKG}"
+
+# In check mode, report the expected user tools and return without network or writes.
+if [[ ${MODE} == check ]]; then
+  export PATH="$HOME/.bun/bin:$HOME/.local/bin:$HOME/.dotnet:$HOME/.dotnet/tools:$PATH"
+  for c in python fd bat fzf rg eza jq git go psql node npm pnpm bun uv dotnet dotnet-ef csharp-ls; do
+    p="$(command -v "$c" 2>/dev/null || true)"
+    printf '  %-24s %s\n' "$c" "${p:-НЕ НАЙДЕН}"
+  done
+  [[ -f "$HOME/.config/pip/pip.conf" ]] || printf 'WARNING: отсутствует %s\n' "$HOME/.config/pip/pip.conf" >&2
+  [[ -f "$HOME/.config/uv/uv.toml" ]] || printf 'WARNING: отсутствует %s\n' "$HOME/.config/uv/uv.toml" >&2
+  [[ -f "$HOME/.bashrc" ]] && grep -q 'DEV ENV BLOCK' "$HOME/.bashrc" ||
+    printf 'WARNING: DEV ENV BLOCK отсутствует в %s\n' "$HOME/.bashrc" >&2
+  exit 0
+fi
 
 # ---------- 2. Bun и UV (в $HOME, без sudo) ----------
 # установщики сами допишут PATH в ~/.bashrc.
@@ -80,8 +102,6 @@ default = true
 EOF
 
 git lfs install
-
-# ---------- 6. ~/.bashrc: PATH, TZ, prompt (идемпотентно) ----------
 
 # ---------- 8. ~/.bashrc: PATH, TZ, prompt (идемпотентно) ----------
 BASHRC="$HOME/.bashrc"
