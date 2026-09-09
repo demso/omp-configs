@@ -2,11 +2,11 @@
 #
 # Первоначальная настройка пользователя agent в WSL.
 #
-# 1. Скопируйте пример конфигурации в защищённый путь:
-#      sudo install -o root -g root -m 600 \
-#          agent-setup.conf.example /root/agent-setup.conf
-# 2. Отредактируйте конфигурацию:
-#      sudoedit /root/agent-setup.conf
+# 1. Установите общий конфиг до запуска:
+#      sudo install -o root -g root -m 644 \
+#          agent-setup.conf.example /etc/agent-setup.conf
+# 2. При необходимости отредактируйте его:
+#      sudoedit /etc/agent-setup.conf
 # 3. Убедитесь, что C: смонтирован в /mnt/c через DrvFs с metadata.
 # 4. Запустите скрипт от root:
 #      sudo ./first.sh
@@ -20,7 +20,7 @@
 set -Eeuo pipefail
 umask 027
 
-CONFIG_FILE="/root/agent-setup.conf"
+CONFIG_FILE="/etc/agent-setup.conf"
 
 fail() {
     printf 'ERROR: %s\n' "$*" >&2
@@ -29,10 +29,10 @@ fail() {
 
 [[ ${EUID} -eq 0 ]] || fail 'запустите скрипт через sudo или из root-shell'
 [[ -r ${CONFIG_FILE} ]] || fail "конфигурация не найдена: ${CONFIG_FILE}"
-[[ $(stat --format='%U:%a' "${CONFIG_FILE}") == root:600 ]] ||
-    fail "${CONFIG_FILE} должен принадлежать root и иметь режим 600"
+[[ $(stat --format='%U:%G:%a' "${CONFIG_FILE}") == root:root:644 ]] ||
+    fail "${CONFIG_FILE} должен принадлежать root:root и иметь режим 644"
 
-# Конфигурация является Bash-файлом и загружается только из root-owned файла.
+# Общий конфиг не должен содержать секреты: его читают first.sh, second.sh и setup.sh.
 # shellcheck disable=SC1090
 source "${CONFIG_FILE}"
 
@@ -42,11 +42,16 @@ source "${CONFIG_FILE}"
 : "${GIT_NAME:?GIT_NAME не задан}"
 : "${GIT_EMAIL:?GIT_EMAIL не задан}"
 : "${SHARE_GROUP:?SHARE_GROUP не задан}"
+: "${APT_MIRROR:?APT_MIRROR не задан}"
+: "${PYPI_MIRROR:?PYPI_MIRROR не задан}"
+: "${NPM_REGISTRY:?NPM_REGISTRY не задан}"
+: "${TZ_VALUE:?TZ_VALUE не задан}"
 
 declare -p C_ALLOWED_RELATIVE_PATHS >/dev/null 2>&1 ||
     fail 'C_ALLOWED_RELATIVE_PATHS должен быть Bash-массивом'
 declare -p AGENT_MOUNT_TARGETS >/dev/null 2>&1 ||
     fail 'AGENT_MOUNT_TARGETS должен быть Bash-массивом'
+
 
 AGENT_HOME="/home/${SECOND_USERNAME}"
 C_MOUNT="/mnt/c"
@@ -101,11 +106,52 @@ validate_identifiers() {
 }
 
 install_dependencies() {
-    log 'Установка зависимостей'
+    log 'Установка системных зависимостей и инструментов'
 
     export DEBIAN_FRONTEND=noninteractive
+    local apt_files f ls_package icu_package
+
+    APT_MIRROR="${APT_MIRROR%/}"
+    shopt -s nullglob
+    apt_files=(/etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list)
+    for f in "${apt_files[@]}"; do
+        grep -qE '(ubuntu\.com|kernel\.org)/ubuntu' "${f}" 2>/dev/null || continue
+        [[ -e "${f}.orig" ]] || cp "${f}" "${f}.orig"
+        sed -i -E \
+            -e "s|https?://[^[:space:]/]*\.ubuntu\.com/ubuntu-ports/?|${APT_MIRROR}-ports/|g" \
+            -e "s|https?://[^[:space:]/]*\.kernel\.org/ubuntu-ports/?|${APT_MIRROR}-ports/|g" \
+            -e "s|https?://[^[:space:]/]*\.ubuntu\.com/ubuntu/?|${APT_MIRROR}/|g" \
+            -e "s|https?://[^[:space:]/]*\.kernel\.org/ubuntu/?|${APT_MIRROR}/|g" \
+            "${f}"
+    done
+    shopt -u nullglob
+
+    printf 'Acquire::Retries "5";\nAcquire::http::Timeout "60";\nAcquire::https::Timeout "60";\n' > /etc/apt/apt.conf.d/99retry
     apt-get update
-    apt-get install -y acl build-essential curl git
+    if apt-get install --dry-run exa >/dev/null 2>&1; then
+        ls_package=exa
+    else
+        ls_package=eza
+    fi
+
+    apt-get install -y --no-install-recommends \
+        acl build-essential ca-certificates curl wget unzip \
+        git git-lfs python3 python3-dev python3-venv python3-pip \
+        python-is-python3 nodejs npm fd-find bat fzf ripgrep jq \
+        "${ls_package}" golang-go postgresql-client \
+        libssl-dev zlib1g-dev libffi-dev vim tree tzdata
+
+    local icu_package
+    icu_package="$(apt-cache search --names-only '^libicu[0-9]+$' | awk '{print $1}' | sort -V | tail -n1)"
+    if [[ -n ${icu_package} ]] && apt-get install --dry-run "${icu_package}" >/dev/null 2>&1; then
+        apt-get install -y "${icu_package}"
+    fi
+
+    apt-get clean
+    command -v fdfind >/dev/null 2>&1 && ln -sf "$(command -v fdfind)" /usr/local/bin/fd
+    command -v batcat >/dev/null 2>&1 && ln -sf "$(command -v batcat)" /usr/local/bin/bat
+    ln -snf "/usr/share/zoneinfo/${TZ_VALUE}" /etc/localtime
+    printf '%s\n' "${TZ_VALUE}" > /etc/timezone
 }
 
 ensure_users() {
@@ -490,6 +536,10 @@ default=${MAIN_USERNAME}
     sudo -l -U ${SECOND_USERNAME}
     systemctl status agent-wsl-mounts.service
     findmnt -R ${AGENT_HOME}
+
+Затем от имени ${SECOND_USERNAME} запустите:
+
+    ./second.sh
 
 EOF
 }

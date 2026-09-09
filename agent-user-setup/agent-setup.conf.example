@@ -1,11 +1,13 @@
-# Конфигурация для first.sh
+# Общий несекретный конфиг для first.sh, second.sh и setup.sh.
 # Установка:
-#   sudo install -o root -g root -m 600 \
-#       agent-setup.conf.example /root/agent-setup.conf
+#   sudo install -o root -g root -m 644 \
+#       agent-setup.conf.example /etc/agent-setup.conf
 # Редактирование:
-#   sudoedit /root/agent-setup.conf
-# Запуск:
+#   sudoedit /etc/agent-setup.conf
+# Запуск системной настройки:
 #   sudo ./first.sh
+# Запуск пользовательской настройки:
+#   ./second.sh
 
 # Основной Linux-пользователь.
 MAIN_USERNAME="koposov"
@@ -22,6 +24,12 @@ GIT_EMAIL="agent@example.com"
 
 # Группа доступа к выбранным каталогам C:.
 SHARE_GROUP="agent-share"
+
+# Пользовательские зеркала и часовой пояс для setup.sh.
+APT_MIRROR="http://mirror.yandex.ru/ubuntu"
+PYPI_MIRROR="https://mirror.yandex.ru/pypi/web/simple/"
+NPM_REGISTRY="https://registry.npmmirror.com"
+TZ_VALUE="Europe/Moscow"
 
 # Относительные каталоги внутри C:/Users/WINDOWS_USERNAME.
 C_ALLOWED_RELATIVE_PATHS=(

@@ -1,18 +1,44 @@
-# Проверка текущих монтирований drvfs
-mount | grep drvfs
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+CONFIG_FILE="/etc/agent-setup.conf"
+[[ -r ${CONFIG_FILE} ]] || {
+    printf 'ERROR: конфигурация не найдена: %s\n' "${CONFIG_FILE}" >&2
+    exit 1
+}
+# shellcheck disable=SC1090
+source "${CONFIG_FILE}"
+
+: "${MAIN_USERNAME:?MAIN_USERNAME не задан}"
+: "${SECOND_USERNAME:?SECOND_USERNAME не задан}"
+: "${WINDOWS_USERNAME:?WINDOWS_USERNAME не задан}"
+
+[[ $(id --user --name) == "${SECOND_USERNAME}" ]] || {
+    printf 'ERROR: запустите second.sh от имени %s\n' "${SECOND_USERNAME}" >&2
+    exit 1
+}
+
+# Проверка текущих монтирований drvfs.
+findmnt --type drvfs || true
 ls -ld /mnt/c /mnt/d
 
-# Проверка разделения прав между пользователями
-sudo -u "$SECOND_USERNAME" ls /mnt/c || echo "Access denied as expected"
-sudo -u "$SECOND_USERNAME" touch /mnt/d/test && echo "Write access confirmed"
-sudo -u "$SECOND_USERNAME" rm /mnt/d/test
+# Проверка разделения прав между пользователями.
+if ls /mnt/c >/dev/null 2>&1; then
+    echo "WARNING: ${SECOND_USERNAME} видит /mnt/c напрямую"
+else
+    echo "Access denied as expected"
+fi
+touch /mnt/d/test && echo "Write access confirmed"
+rm /mnt/d/test
 
-# Создание каталога и bind-mount для конфигурации Oh My Pi
-mkdir -p "/home/$SECOND_USERNAME/.omp"
-sudo mount --bind "/mnt/c/Users/$MAIN_USERNAME/.omp" "/home/$SECOND_USERNAME/.omp"
+# Bind-монтирования создаёт root-owned systemd-сервис из first.sh.
+for target in "${AGENT_MOUNT_TARGETS[@]}"; do
+    mountpoint --quiet "${target}" ||
+        printf 'WARNING: точка ещё не смонтирована: %s\n' "${target}" >&2
+done
 
-# Запуск сторонних скриптов настройки
-sudo -v && bash wsl-setup.sh
+# Запуск пользовательского скрипта без root.
+bash setup.sh
 
 # Перезапуск оболочки для обновления PATH и переменного окружения
 exec bash
