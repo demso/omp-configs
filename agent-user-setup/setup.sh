@@ -25,6 +25,7 @@ source "${CONFIG_FILE}"
 : "${PYPI_MIRROR:?PYPI_MIRROR не задан}"
 : "${NPM_REGISTRY:?NPM_REGISTRY не задан}"
 : "${TZ_VALUE:?TZ_VALUE не задан}"
+PS1_LINE='PS1="\[\033[01;32m\][agent]\[\033[00m\] \[\033[01;34m\][\u@\h]\[\033[00m\]\$ "'
 
 if [ "$(id -u)" -eq 0 ]; then
   echo "ERROR: setup.sh нужно запускать от ${SECOND_USERNAME}, не от root." >&2
@@ -83,7 +84,7 @@ if [[ ${MODE} == check ]]; then
      ! grep -Fqx -- "export TZ=\"${TZ_VALUE}\"" "$BASHRC" 2>/dev/null ||
      ! grep -Fqx -- 'export DOTNET_ROOT="$HOME/.dotnet"' "$BASHRC" 2>/dev/null ||
      ! grep -Fqx -- 'export PATH="$HOME/.bun/bin:$HOME/.local/bin:$HOME/.dotnet:$HOME/.dotnet/tools:$PATH"' "$BASHRC" 2>/dev/null ||
-     ! grep -Fqx -- 'PS1="\[\033[01;32m\][agent]\[\033[00m\] \[\033[01;34m\][\u@\h]\[\033[00m\]\$ "' "$BASHRC" 2>/dev/null ||
+     ! grep -Fqx -- "${PS1_LINE}" "$BASHRC" 2>/dev/null ||
      ! grep -Fqx -- 'export WINDOWS_HOST=$(ip route | grep default | awk '\''{print $3}'\'')' "$BASHRC" 2>/dev/null ||
      ! grep -Fqx -- '# ===== END DEV ENV BLOCK =====' "$BASHRC" 2>/dev/null; then
     printf 'WARNING: отсутствует или отличается DEV ENV BLOCK в %s\n' "$BASHRC" >&2
@@ -120,7 +121,7 @@ write_bashrc_if_changed() {
 export TZ="${TZ_VALUE}"
 export DOTNET_ROOT="\$HOME/.dotnet"
 export PATH="\$HOME/.bun/bin:\$HOME/.local/bin:\$HOME/.dotnet:\$HOME/.dotnet/tools:\$PATH"
-PS1="\[\033[01;32m\][agent]\[\033[00m\] \[\033[01;34m\][\u@\h]\[\033[00m\]\$ "
+${PS1_LINE}
 export WINDOWS_HOST=\$(ip route | grep default | awk '{print \$3}')
 #echo export http_proxy=http://\$WINDOWS_HOST:55366
 #echo export https_proxy=http://\$WINDOWS_HOST:55366
