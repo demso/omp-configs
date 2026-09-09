@@ -47,15 +47,23 @@ for script in second.sh setup.sh; do
     non_comment_lines=$(grep -v '^\s*#' "${path}" | grep -v '^[[:space:]]*$')
 
     # Flag only lines where sudo is the leading command (actual execution)
+    # Also flag sudo in command position after &&, ||, |, or ; to reject executable sudo tokens
     while IFS= read -r line; do
+        # Skip lines with command-positional keywords
         [[ "${line}" =~ ^[[:space:]]*(declare|local|local[[:space:]]+)|^[[:space:]]*(if|case|for|while|function)\b ]] && continue
         [[ "${line}" =~ ^[[:space:]]*sudo[[:space:]]+-l ]] && continue
 
+        # Flag sudo in non-leading positions (after &&, ||, |, ;)
+        if echo "${line}" | grep -qE '\s+(&&|\|\||\|)\s*sudo'; then
+            ERRORS+=("sudo found in command in ${path}: ${line:0:80}")
+            continue
+        fi
+
+        # Flag sudo in command position
         if echo "${line}" | grep -qE '\b(sudo|SUDO)\b'; then
             first_word=$(echo "${line}" | awk '{print $1}')
-            if [[ "${first_word}" == sudo ]] || [[ "${first_word}" == SUDO ]]; then
+            if [[ "${first_word}" != sudo ]] && [[ "${first_word}" != SUDO ]]; then
                 ERRORS+=("sudo found in command in ${path}: ${line:0:80}")
-                break
             fi
         fi
     done <<< "${non_comment_lines}"
@@ -67,6 +75,16 @@ done
 if grep -hE 'mktemp[[:space:]]+/mnt/d/' "$SCRIPT_DIR"/first.sh "$SCRIPT_DIR"/second.sh "$SCRIPT_DIR"/setup.sh 2>/dev/null \
     | grep -vE 'XXXXXX' | grep -q '.'; then
     WARNINGS+=("Potential fixed path /mnt/d/ in one of the setup scripts")
+fi
+
+# Flag fixed writes/removals to /mnt/d/ beyond approved mktemp probe
+# (e.g. "> /mnt/d/test", "touch /mnt/d/test", "rm -f /mnt/d/old", "cp x /mnt/d/y").
+if grep -qE '([>|]|\b2>)[[:space:]]*/mnt/d/' "$SCRIPT_DIR"/first.sh "$SCRIPT_DIR"/second.sh "$SCRIPT_DIR"/setup.sh 2>/dev/null; then
+    ERRORS+=("Fixed path write detected in setup scripts")
+fi
+
+if grep -qE '\b(touch|rm|ln|cp|mv)[[:space:]].*/mnt/d/' "$SCRIPT_DIR"/first.sh "$SCRIPT_DIR"/second.sh "$SCRIPT_DIR"/setup.sh 2>/dev/null; then
+    ERRORS+=("Fixed path operation detected in setup scripts")
 fi
 
 if grep -qE '\brm\s+-[fr][rf]\b' "$SCRIPT_DIR"/first.sh "$SCRIPT_DIR"/second.sh "$SCRIPT_DIR"/setup.sh 2>/dev/null; then
@@ -90,7 +108,7 @@ echo "Step 2: Shared configuration references"
 # 2a. Verify all three scripts source /etc/agent-setup.conf
 for script in "$SCRIPT_DIR"/first.sh "$SCRIPT_DIR"/second.sh "$SCRIPT_DIR"/setup.sh; do
     # Check for source with variable or literal path
-    if grep -qE "source.*CONFIG_FILE" "${script}" 2>/dev/null; then
+    if grep -qE 'source.*CONFIG_FILE' "${script}" 2>/dev/null; then
         # Check if the variable is set to /etc/agent-setup.conf
         if grep -qE 'CONFIG_FILE="/etc/agent-setup.conf"' "${script}" 2>/dev/null; then
             # Found it!
@@ -107,29 +125,13 @@ for script in "$SCRIPT_DIR"/first.sh "$SCRIPT_DIR"/second.sh "$SCRIPT_DIR"/setup
 done
 
 # 2b. Verify example defines required variables
-if grep -qE "APT_MIRROR=\"[^\"]*\"" "$SCRIPT_DIR"/agent-setup.conf.example 2>/dev/null; then
-    echo "  ✓ APT_MIRROR defined"
-else
-    ERRORS+=("APT_MIRROR not found in agent-setup.conf.example")
-fi
-
-if grep -qE "PYPI_MIRROR=\"[^\"]*\"" "$SCRIPT_DIR"/agent-setup.conf.example 2>/dev/null; then
-    echo "  ✓ PYPI_MIRROR defined"
-else
-    ERRORS+=("PYPI_MIRROR not found in agent-setup.conf.example")
-fi
-
-if grep -qE "NPM_REGISTRY=\"[^\"]*\"" "$SCRIPT_DIR"/agent-setup.conf.example 2>/dev/null; then
-    echo "  ✓ NPM_REGISTRY defined"
-else
-    ERRORS+=("NPM_REGISTRY not found in agent-setup.conf.example")
-fi
-
-if grep -qE "TZ_VALUE=\"[^\"]*\"" "$SCRIPT_DIR"/agent-setup.conf.example 2>/dev/null; then
-    echo "  ✓ TZ_VALUE defined"
-else
-    ERRORS+=("TZ_VALUE not found in agent-setup.conf.example")
-fi
+for var in APT_MIRROR PYPI_MIRROR NPM_REGISTRY TZ_VALUE; do
+    if grep -qE "${var}=\"[^\"]*\"" "$SCRIPT_DIR"/agent-setup.conf.example 2>/dev/null; then
+        echo "  ✓ ${var} defined"
+    else
+        ERRORS+=("${var} not found in agent-setup.conf.example")
+    fi
+done
 
 echo
 
