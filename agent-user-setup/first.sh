@@ -64,6 +64,7 @@ declare -p AGENT_MOUNT_TARGETS >/dev/null 2>&1 ||
 AGENT_HOME="/home/${SECOND_USERNAME}"
 C_MOUNT="/mnt/c"
 WINDOWS_PROFILE="${C_MOUNT}/Users/${WINDOWS_USERNAME}"
+SECOND_USER_MISSING=0
 
 C_ALLOWED_PATHS=()
 for relative_path in "${C_ALLOWED_RELATIVE_PATHS[@]}"; do
@@ -197,6 +198,8 @@ ensure_users() {
         passwd "${SECOND_USERNAME}"
     else
         printf 'WARNING: агентский пользователь не найден: %s\n' "${SECOND_USERNAME}"
+        SECOND_USER_MISSING=1
+        return
     fi
 }
 
@@ -594,6 +597,10 @@ main() {
     validate_identifiers
     install_dependencies
     ensure_users
+    if (( SECOND_USER_MISSING )); then
+        printf 'WARNING: проверки, требующие пользователя %s, пропущены.\n' "${SECOND_USERNAME}"
+        return
+    fi
     remove_agent_sudo
     assert_no_privileged_groups
     assert_no_sudo_access
