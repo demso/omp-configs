@@ -1,53 +1,518 @@
-MAIN_USERNAME="user"
-SECOND_USERNAME="agent"
-GIT_NAME="Agent"
-GIT_EMAIL="agent@example.com"
+#!/usr/bin/env bash
+#
+# Первоначальная настройка пользователя agent в WSL.
+#
+# 1. Скопируйте пример конфигурации в защищённый путь:
+#      sudo install -o root -g root -m 600 \
+#          agent-setup.conf.example /root/agent-setup.conf
+# 2. Отредактируйте конфигурацию:
+#      sudoedit /root/agent-setup.conf
+# 3. Убедитесь, что C: смонтирован в /mnt/c через DrvFs с metadata.
+# 4. Запустите скрипт от root:
+#      sudo ./first.sh
+# 5. Проверьте /etc/fstab и /etc/wsl.conf из итогового сообщения.
+# 6. Перезапустите WSL из PowerShell:
+#      wsl --shutdown
+#
+# Скрипт не изменяет права и содержимое /mnt/d.
+#
 
-# 1. Создание пользователя
-sudo useradd -m -s /bin/bash "$SECOND_USERNAME"
-sudo usermod -aG sudo "$SECOND_USERNAME"
+set -Eeuo pipefail
+umask 027
 
-# 2. Задание пароля для нового пользователя
-sudo passwd "$SECOND_USERNAME"
+CONFIG_FILE="/root/agent-setup.conf"
 
-# 3. Настройка sudoers NOPASSWD
-echo "$SECOND_USERNAME ALL=(ALL) NOPASSWD: /usr/bin/apt, /usr/bin/apt-get, /usr/bin/systemctl" | sudo tee "/etc/sudoers.d/$SECOND_USERNAME"
-sudo chmod 440 "/etc/sudoers.d/$SECOND_USERNAME"
+fail() {
+    printf 'ERROR: %s\n' "$*" >&2
+    exit 1
+}
 
-# 4. Проверка конфига sudoers
-sudo visudo -c
+[[ ${EUID} -eq 0 ]] || fail 'запустите скрипт через sudo или из root-shell'
+[[ -r ${CONFIG_FILE} ]] || fail "конфигурация не найдена: ${CONFIG_FILE}"
+[[ $(stat --format='%U:%a' "${CONFIG_FILE}") == root:600 ]] ||
+    fail "${CONFIG_FILE} должен принадлежать root и иметь режим 600"
 
-# 5. Установка пакетов
-sudo apt update
-sudo apt install -y build-essential git curl acl
+# Конфигурация является Bash-файлом и загружается только из root-owned файла.
+# shellcheck disable=SC1090
+source "${CONFIG_FILE}"
 
-# 6. Настройка Git от имени SECOND_USERNAME
-sudo -u "$SECOND_USERNAME" git config --global user.name "$GIT_NAME"
-sudo -u "$SECOND_USERNAME" git config --global user.email "$GIT_EMAIL"
-sudo -u "$SECOND_USERNAME" git config --global core.autocrlf input
-sudo -u "$SECOND_USERNAME" git config --global alias.hist 'log --pretty=format:"%Cred%h%Creset %C(green)(%ad)%Creset
-%s%C(yellow)%d%Creset  %C(bold blue)[%an] " --graph --date=format-local:"%d-%m-%Y %H:%M"'
-sudo -u "$SECOND_USERNAME" git config --global alias.tree 'log --graph --pretty=format:"%C(yellow)%h %Creset%Cgreen(%ad) %cr
-%C(blue)<%an>%Creset%d%n%s%n" --abbrev-commit --date=format-local:"%d-%m-%Y %H:%M"'
-sudo -u "$SECOND_USERNAME" git config --global alias.st status
-sudo -u "$SECOND_USERNAME" git config --global alias.c 'commit -m'
-sudo -u "$SECOND_USERNAME" git config --global init.defaultBranch main
-sudo -u "$SECOND_USERNAME" git config --global color.status always
-sudo -u "$SECOND_USERNAME" git config --global status.short false
-sudo -u "$SECOND_USERNAME" git config --global status.branch true
+: "${MAIN_USERNAME:?MAIN_USERNAME не задан}"
+: "${WINDOWS_USERNAME:?WINDOWS_USERNAME не задан}"
+: "${SECOND_USERNAME:?SECOND_USERNAME не задан}"
+: "${GIT_NAME:?GIT_NAME не задан}"
+: "${GIT_EMAIL:?GIT_EMAIL не задан}"
+: "${SHARE_GROUP:?SHARE_GROUP не задан}"
 
-# Настройка ACL для доступа MAIN_USERNAME к папке SECOND_USERNAME
-sudo setfacl -R -m "u:${MAIN_USERNAME}:rwx,m:rwx" "/home/$SECOND_USERNAME/"
-sudo setfacl -R -d -m "u:${MAIN_USERNAME}:rwx,m:rwx" "/home/$SECOND_USERNAME/"
+declare -p C_ALLOWED_RELATIVE_PATHS >/dev/null 2>&1 ||
+    fail 'C_ALLOWED_RELATIVE_PATHS должен быть Bash-массивом'
+declare -p AGENT_MOUNT_TARGETS >/dev/null 2>&1 ||
+    fail 'AGENT_MOUNT_TARGETS должен быть Bash-массивом'
 
-# 7. Права на домашнюю директорию
-sudo chmod 755 "/home/$SECOND_USERNAME"
-sudo chmod -R a+rX "/home/$SECOND_USERNAME"
+AGENT_HOME="/home/${SECOND_USERNAME}"
+C_MOUNT="/mnt/c"
+WINDOWS_PROFILE="${C_MOUNT}/Users/${WINDOWS_USERNAME}"
 
-# Права на домашнюю директорию основного пользователя
-chmod 750 "/home/$MAIN_USERNAME"
-# Ограничение доступа к смонтированному диску C
-chmod 750 /mnt/c
+C_ALLOWED_PATHS=()
+for relative_path in "${C_ALLOWED_RELATIVE_PATHS[@]}"; do
+    [[ ${relative_path} != /* && ${relative_path} != *..* ]] ||
+        fail "недопустимый относительный путь в конфигурации: ${relative_path}"
+    C_ALLOWED_PATHS+=("${WINDOWS_PROFILE}/${relative_path}")
+done
 
-# 9. Проверка
-getfacl "/home/$SECOND_USERNAME"
+[[ ${#C_ALLOWED_PATHS[@]} -eq ${#AGENT_MOUNT_TARGETS[@]} ]] ||
+    fail 'C_ALLOWED_RELATIVE_PATHS и AGENT_MOUNT_TARGETS должны иметь одинаковую длину'
+
+FORBIDDEN_GROUPS=(sudo wheel docker lxd libvirt disk shadow adm kvm)
+log() {
+    printf '\n==> %s\n' "$*"
+}
+
+die() {
+    printf 'ERROR: %s\n' "$*" >&2
+    exit 1
+}
+
+on_error() {
+    local exit_code=$?
+    printf 'ERROR: command failed at line %s: %s\n' \
+        "$1" "$2" >&2
+    exit "$exit_code"
+}
+
+trap 'on_error "$LINENO" "$BASH_COMMAND"' ERR
+
+require_root() {
+    [[ ${EUID} -eq 0 ]] || die 'запустите скрипт от root: sudo -i; /root/configure-agent.sh'
+}
+
+validate_identifiers() {
+    [[ ${MAIN_USERNAME} =~ ^[a-z_][a-z0-9_-]*$ ]] ||
+        die "недопустимое Linux-имя: ${MAIN_USERNAME}"
+    [[ ${SECOND_USERNAME} =~ ^[a-z_][a-z0-9_-]*$ ]] ||
+        die "недопустимое Linux-имя: ${SECOND_USERNAME}"
+    [[ ${SHARE_GROUP} =~ ^[a-z_][a-z0-9_-]*$ ]] ||
+        die "недопустимое имя группы: ${SHARE_GROUP}"
+    [[ ${MAIN_USERNAME} != "${SECOND_USERNAME}" ]] ||
+        die 'основной и агентский пользователи должны отличаться'
+
+    # The value is embedded into a root-owned generated shell script.
+    [[ ${WINDOWS_USERNAME} =~ ^[A-Za-z0-9._-]+$ ]] ||
+        die 'WINDOWS_USERNAME должен содержать только латинские буквы, цифры, точку, _ или -'
+}
+
+install_dependencies() {
+    log 'Установка зависимостей'
+
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y acl build-essential curl git
+}
+
+ensure_users() {
+    log 'Проверка пользователей'
+
+    getent passwd "${MAIN_USERNAME}" >/dev/null ||
+        die "основной Linux-пользователь не найден: ${MAIN_USERNAME}"
+
+    if getent passwd "${SECOND_USERNAME}" >/dev/null; then
+        usermod --shell /bin/bash "${SECOND_USERNAME}"
+    else
+        useradd --create-home --shell /bin/bash "${SECOND_USERNAME}"
+        passwd "${SECOND_USERNAME}"
+    fi
+}
+
+remove_agent_sudo() {
+    log "Удаление sudo-доступа у ${SECOND_USERNAME}"
+
+    if getent group sudo >/dev/null 2>&1; then
+        gpasswd --delete "${SECOND_USERNAME}" sudo >/dev/null 2>&1 || true
+    fi
+
+    # Remove the file generated by the previous version of the setup script.
+    rm -f "/etc/sudoers.d/${SECOND_USERNAME}"
+
+    # Syntax validation only; effective access is checked separately below.
+    if command -v visudo >/dev/null 2>&1; then
+        visudo --check
+    fi
+}
+
+assert_no_privileged_groups() {
+    log 'Проверка привилегированных групп'
+
+    local groups forbidden
+    groups=" $(id --groups --name "${SECOND_USERNAME}") "
+
+    for forbidden in "${FORBIDDEN_GROUPS[@]}"; do
+        if [[ ${groups} == *" ${forbidden} "* ]]; then
+            die "${SECOND_USERNAME} состоит в привилегированной группе: ${forbidden}"
+        fi
+    done
+}
+
+assert_no_sudo_access() {
+    log 'Проверка sudo-доступа'
+
+    local sudo_listing sudo_status
+    set +e
+    sudo_listing="$(sudo --non-interactive --list --user "${SECOND_USERNAME}" 2>&1)"
+    sudo_status=$?
+    set -e
+
+    if [[ ${sudo_status} -eq 0 || ${sudo_listing} =~ 'may run sudo' || ${sudo_listing} =~ \([[:space:]]*ALL ]]; then
+        printf '%s\n' "${sudo_listing}" >&2
+        die "у ${SECOND_USERNAME} остался sudo-доступ"
+    fi
+}
+
+ensure_share_group() {
+    log 'Настройка группы доступа к выбранным каталогам C:'
+
+    if ! getent group "${SHARE_GROUP}" >/dev/null 2>&1; then
+        groupadd --system "${SHARE_GROUP}"
+    fi
+
+    usermod --append --groups "${SHARE_GROUP}" "${SECOND_USERNAME}"
+}
+
+require_c_mount() {
+    log 'Проверка монтирования C:'
+
+    mountpoint --quiet "${C_MOUNT}" ||
+        die "${C_MOUNT} не смонтирован; сначала настройте /etc/fstab и перезапустите WSL"
+
+    local fs_type options main_uid main_gid
+    fs_type="$(findmnt --noheadings --output FSTYPE "${C_MOUNT}")"
+    options="$(findmnt --noheadings --output OPTIONS "${C_MOUNT}")"
+
+    [[ ${fs_type} == drvfs ]] ||
+        die "${C_MOUNT} имеет тип ${fs_type}, ожидался drvfs"
+    [[ ${options} == *metadata* ]] ||
+        die "${C_MOUNT} смонтирован без metadata"
+
+    main_uid="$(id --user "${MAIN_USERNAME}")"
+    main_gid="$(id --group "${MAIN_USERNAME}")"
+    [[ ",${options}," == *",uid=${main_uid},"* ]] ||
+        die "uid монтирования ${C_MOUNT} не совпадает с UID ${MAIN_USERNAME} (${main_uid})"
+    [[ ",${options}," == *",gid=${main_gid},"* ]] ||
+        die "gid монтирования ${C_MOUNT} не совпадает с GID ${MAIN_USERNAME} (${main_gid})"
+}
+
+validate_allowed_paths() {
+    log 'Проверка разрешённых каталогов C:'
+
+    local base base_real resolved path
+    base="${C_MOUNT}/Users/${WINDOWS_USERNAME}"
+    [[ -d ${base} ]] || die "профиль Windows не найден: ${base}"
+    base_real="$(realpath --canonicalize-existing "${base}")"
+
+    for path in "${C_ALLOWED_PATHS[@]}"; do
+        [[ -d ${path} ]] || die "каталог не найден: ${path}"
+        [[ ! -L ${path} ]] || die "разрешённый source-путь не должен быть symlink: ${path}"
+
+        resolved="$(realpath --canonicalize-existing "${path}")"
+        [[ ${resolved} == "${base_real}"/* ]] ||
+            die "каталог выходит за пределы профиля Windows: ${path}"
+
+        if [[ -n "$(find "${path}" -xdev -type l -print -quit)" ]]; then
+            die "разрешённый каталог содержит symlink/reparse point: ${path}"
+        fi
+    done
+}
+
+apply_share_acl() {
+    log 'Настройка прав выбранных каталогов C:'
+
+    local path
+    for path in "${C_ALLOWED_PATHS[@]}"; do
+        # This metadata change is performed only during initial setup or when
+        # the allowlist changes, never by the boot mount service.
+        find "${path}" -xdev -exec chown "${MAIN_USERNAME}:${SHARE_GROUP}" {} +
+        find "${path}" -xdev -type d -exec chmod u+rwx,g+rwx,o-rwx {} +
+        find "${path}" -xdev -type f -exec chmod u+rw,g+rw,o-rwx {} +
+        find "${path}" -xdev -type d -exec chmod g+s {} +
+    done
+
+    # Prevent agent from walking the complete C: tree directly. The main user
+    # remains the owner according to the DrvFs uid option.
+    chmod 700 "${C_MOUNT}"
+}
+
+unmount_existing_targets() {
+    log 'Очистка старых bind-монтирований'
+
+    local path
+    for path in "${AGENT_MOUNT_TARGETS[@]}"; do
+        if mountpoint --quiet "${path}"; then
+            umount "${path}"
+        fi
+    done
+}
+
+prepare_agent_home() {
+    log 'Подготовка домашнего каталога agent'
+
+    local agent_group
+    agent_group="$(id --group --name "${SECOND_USERNAME}")"
+
+    [[ -d ${AGENT_HOME} ]] || die "домашний каталог не найден: ${AGENT_HOME}"
+
+    # The home directory itself is root-owned. agent gets traversal only;
+    # this prevents it from replacing root-owned mount targets with symlinks.
+    chown root:"${agent_group}" "${AGENT_HOME}"
+    chmod 710 "${AGENT_HOME}"
+    setfacl --modify \
+        "u:${MAIN_USERNAME}:rwx,g::--x,m::rwx,o::---" \
+        "${AGENT_HOME}"
+    setfacl --modify \
+        "d:u:${MAIN_USERNAME}:rwx,d:g::--x,d:m::rwx,d:o::---" \
+        "${AGENT_HOME}"
+
+    # Give MAIN_USERNAME access to existing non-mount entries, but do not
+    # recurse into Windows trees that will be mounted below this directory.
+    find "${AGENT_HOME}" -xdev \
+        -path "${AGENT_HOME}/.omp" -prune -o \
+        -path "${AGENT_HOME}/.agents" -prune -o \
+        -path "${AGENT_HOME}/shared" -prune -o \
+        -exec setfacl --modify "u:${MAIN_USERNAME}:rwX,m::rwX,o::---" {} +
+
+    # Writable, non-mount directories for normal agent state.
+    install --directory --owner="${SECOND_USERNAME}" --group="${agent_group}" \
+        --mode=700 \
+        "${AGENT_HOME}/.config" \
+        "${AGENT_HOME}/.cache" \
+        "${AGENT_HOME}/.local" \
+        "${AGENT_HOME}/work"
+
+    for path in \
+        "${AGENT_HOME}/.config" \
+        "${AGENT_HOME}/.cache" \
+        "${AGENT_HOME}/.local" \
+        "${AGENT_HOME}/work"; do
+        setfacl --modify "u:${MAIN_USERNAME}:rwx,m::rwx" "${path}"
+        setfacl --modify \
+            "d:u:${MAIN_USERNAME}:rwx,d:m::rwx,d:o::---" \
+            "${path}"
+    done
+
+    # Mount targets are root-owned and cannot be replaced by agent.
+    install --directory --owner=root --group=root --mode=700 \
+        "${AGENT_HOME}/shared" \
+        "${AGENT_HOME}/.omp" \
+        "${AGENT_HOME}/.agents" \
+        "${AGENT_HOME}/shared/downloads" \
+        "${AGENT_HOME}/shared/screenshots"
+}
+
+configure_git_for_user() {
+    local username="$1" home
+    home="$(getent passwd "${username}" | cut -d: -f6)"
+
+    runuser --user "${username}" -- env HOME="${home}" \
+        git config --global user.name "${GIT_NAME}"
+    runuser --user "${username}" -- env HOME="${home}" \
+        git config --global user.email "${GIT_EMAIL}"
+    runuser --user "${username}" -- env HOME="${home}" \
+        git config --global core.autocrlf input
+    runuser --user "${username}" -- env HOME="${home}" \
+        git config --global core.sharedRepository world
+    runuser --user "${username}" -- env HOME="${home}" \
+        git config --global init.defaultBranch main
+}
+
+configure_git() {
+    log 'Настройка Git'
+    configure_git_for_user "${MAIN_USERNAME}"
+    configure_git_for_user "${SECOND_USERNAME}"
+}
+
+install_mount_script() {
+    log 'Установка root-скрипта bind-монтирования'
+
+    local script_path=/usr/local/sbin/agent-wsl-mounts
+
+    cat > "${script_path}" <<EOF
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+umask 027
+
+SOURCE_PATHS=(
+    "${C_ALLOWED_PATHS[0]}"
+    "${C_ALLOWED_PATHS[1]}"
+    "${C_ALLOWED_PATHS[2]}"
+    "${C_ALLOWED_PATHS[3]}"
+)
+
+TARGET_PATHS=(
+    "${AGENT_MOUNT_TARGETS[0]}"
+    "${AGENT_MOUNT_TARGETS[1]}"
+    "${AGENT_MOUNT_TARGETS[2]}"
+    "${AGENT_MOUNT_TARGETS[3]}"
+)
+
+[[ \${#SOURCE_PATHS[@]} -eq \${#TARGET_PATHS[@]} ]] || exit 1
+
+mount_one() {
+    local source="\$1"
+    local target="\$2"
+
+    [[ -d "\$source" ]] || {
+        printf 'Source directory does not exist: %s\\n' "\$source" >&2
+        return 1
+    }
+    [[ -d "\$target" && ! -L "\$target" ]] || {
+        printf 'Invalid mount target: %s\\n' "\$target" >&2
+        return 1
+    }
+
+    if mountpoint --quiet "\$target"; then
+        return 0
+    fi
+
+    mount --bind "\$source" "\$target"
+}
+
+chmod 700 /mnt/c
+
+for index in "\${!SOURCE_PATHS[@]}"; do
+    mount_one "\${SOURCE_PATHS[\$index]}" "\${TARGET_PATHS[\$index]}"
+done
+EOF
+
+    chown root:root "${script_path}"
+    chmod 700 "${script_path}"
+}
+
+install_systemd_unit() {
+    log 'Установка systemd-сервиса bind-монтирования'
+
+    cat > /etc/systemd/system/agent-wsl-mounts.service <<'EOF'
+[Unit]
+Description=Mount selected Windows directories for agent
+After=local-fs.target
+RequiresMountsFor=/mnt/c
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/agent-wsl-mounts
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    chmod 644 /etc/systemd/system/agent-wsl-mounts.service
+
+    if [[ -d /run/systemd/system ]]; then
+        systemctl daemon-reload
+        systemctl enable agent-wsl-mounts.service
+    else
+        printf 'INFO: systemd не запущен; сервис будет активирован после перезапуска WSL.\n'
+    fi
+}
+
+start_mount_service_if_possible() {
+    log 'Проверка bind-монтирований'
+
+    if [[ ! -d /run/systemd/system ]]; then
+        printf 'INFO: systemd ещё не запущен; проверка mount-сервиса отложена до перезапуска WSL.\n'
+        return
+    fi
+
+    systemctl start agent-wsl-mounts.service
+
+    local path
+    for path in "${AGENT_MOUNT_TARGETS[@]}"; do
+        mountpoint --quiet "${path}" ||
+            die "каталог не смонтирован: ${path}"
+    done
+
+    if runuser --user "${SECOND_USERNAME}" -- test -x "${C_MOUNT}"; then
+        die "${SECOND_USERNAME} может напрямую проходить в ${C_MOUNT}"
+    fi
+
+    for path in "${AGENT_MOUNT_TARGETS[@]}"; do
+        runuser --user "${SECOND_USERNAME}" -- test -r "${path}" ||
+            die "${SECOND_USERNAME} не может читать разрешённый каталог: ${path}"
+        runuser --user "${SECOND_USERNAME}" -- test -w "${path}" ||
+            die "${SECOND_USERNAME} не может писать в разрешённый каталог: ${path}"
+    done
+}
+
+write_checks() {
+    log 'Проверка итоговых прав'
+
+    assert_no_privileged_groups
+    assert_no_sudo_access
+    start_mount_service_if_possible
+
+    [[ " $(id --groups --name "${SECOND_USERNAME}") " == *" ${SHARE_GROUP} "* ]] ||
+        die "${SECOND_USERNAME} не состоит в ${SHARE_GROUP}; нужна новая сессия"
+
+    [[ $(stat --format='%a' "${C_MOUNT}") == 700 ]] ||
+        die "${C_MOUNT} не закрыт режимом 700"
+
+    for path in "${AGENT_MOUNT_TARGETS[@]}"; do
+        [[ -d ${path} && ! -L ${path} ]] ||
+            die "некорректная точка монтирования: ${path}"
+    done
+
+    cat <<EOF
+
+Настройка выполнена.
+
+Проверьте /etc/fstab:
+
+C: /mnt/c drvfs rw,nofail,noatime,metadata,uid=$(id --user "${MAIN_USERNAME}"),gid=$(id --group "${MAIN_USERNAME}"),umask=000 0 0
+D: /mnt/d drvfs rw,nofail,noatime,umask=000 0 0
+
+В /etc/wsl.conf должны быть:
+
+[automount]
+mountFsTab=true
+
+[boot]
+systemd=true
+
+[user]
+default=${MAIN_USERNAME}
+Удалите старую строку command=/usr/local/sbin/agent-wsl-boot из /etc/wsl.conf, если она осталась.
+
+После изменения конфигурации выполните в PowerShell:
+
+    wsl --shutdown
+
+После запуска WSL проверьте:
+
+    id ${SECOND_USERNAME}
+    sudo -l -U ${SECOND_USERNAME}
+    systemctl status agent-wsl-mounts.service
+    findmnt -R ${AGENT_HOME}
+
+EOF
+}
+
+main() {
+    require_root
+    validate_identifiers
+    install_dependencies
+    ensure_users
+    remove_agent_sudo
+    assert_no_privileged_groups
+    assert_no_sudo_access
+    ensure_share_group
+    require_c_mount
+    validate_allowed_paths
+    apply_share_acl
+    unmount_existing_targets
+    prepare_agent_home
+    configure_git
+    install_mount_script
+    install_systemd_unit
+    write_checks
+}
+
+main "$@"
+agent-test

@@ -1,0 +1,40 @@
+# Конфигурация для first.sh
+# Установка:
+#   sudo install -o root -g root -m 600 \
+#       agent-setup.conf.example /root/agent-setup.conf
+# Редактирование:
+#   sudoedit /root/agent-setup.conf
+# Запуск:
+#   sudo ./first.sh
+
+# Основной Linux-пользователь.
+MAIN_USERNAME="koposov"
+
+# Имя профиля Windows в /mnt/c/Users/.
+WINDOWS_USERNAME="koposov"
+
+# Пользователь, под которым запускаются агенты.
+SECOND_USERNAME="agent"
+
+# Git-настройки для обоих пользователей.
+GIT_NAME="Agent"
+GIT_EMAIL="agent@example.com"
+
+# Группа доступа к выбранным каталогам C:.
+SHARE_GROUP="agent-share"
+
+# Относительные каталоги внутри C:/Users/WINDOWS_USERNAME.
+C_ALLOWED_RELATIVE_PATHS=(
+    ".omp"
+    ".agents"
+    "Downloads"
+    "Documents/ShareX/Screenshots"
+)
+
+# Точки монтирования внутри /home/SECOND_USERNAME.
+AGENT_MOUNT_TARGETS=(
+    "/home/${SECOND_USERNAME}/.omp"
+    "/home/${SECOND_USERNAME}/.agents"
+    "/home/${SECOND_USERNAME}/shared/downloads"
+    "/home/${SECOND_USERNAME}/shared/screenshots"
+)
