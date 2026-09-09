@@ -10,7 +10,7 @@ case "${MODE}" in
     *) printf 'Usage: %s [check|apply]\n' "$0" >&2; exit 2 ;;
 esac
 
-
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="/etc/agent-setup.conf"
 [[ -r ${CONFIG_FILE} ]] || {
     printf 'ERROR: конфигурация не найдена: %s\n' "${CONFIG_FILE}" >&2
@@ -57,10 +57,10 @@ check_environment
 
 # Запуск пользовательского скрипта без root в выбранном режиме.
 if [[ ${MODE} == apply ]]; then
-    bash setup.sh apply
+    bash "${SCRIPT_DIR}/setup.sh" apply
     printf 'Run: source ~/.bashrc\n'
 else
-    bash setup.sh check
+    bash "${SCRIPT_DIR}/setup.sh" check
 fi
 
 printf '\n===== Проверка пользовательских инструментов =====\n'

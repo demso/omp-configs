@@ -617,4 +617,3 @@ main() {
 }
 
 main "$@"
-agent-test
