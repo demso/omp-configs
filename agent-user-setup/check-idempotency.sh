@@ -46,25 +46,18 @@ for script in second.sh setup.sh; do
     # Extract non-comment, non-empty lines
     non_comment_lines=$(grep -v '^\s*#' "${path}" | grep -v '^[[:space:]]*$')
 
-    # Flag only lines where sudo is the leading command (actual execution)
-    # Also flag sudo in command position after &&, ||, |, or ; to reject executable sudo tokens
+    # Flag any executable sudo token on the line: leading sudo, sudo after
+    # &&, ||, |, or ;, env-assignment prefix (VAR=... sudo ...), or any other
+    # non-leading position. Comment lines and the read-only `sudo -l` probe
+    # are skipped above.
     while IFS= read -r line; do
         # Skip lines with command-positional keywords
         [[ "${line}" =~ ^[[:space:]]*(declare|local|local[[:space:]]+)|^[[:space:]]*(if|case|for|while|function)\b ]] && continue
         [[ "${line}" =~ ^[[:space:]]*sudo[[:space:]]+-l ]] && continue
 
-        # Flag sudo in non-leading positions (after &&, ||, |, ;)
-        if echo "${line}" | grep -qE '\s+(&&|\|\||\|)\s*sudo'; then
-            ERRORS+=("sudo found in command in ${path}: ${line:0:80}")
-            continue
-        fi
-
-        # Flag sudo in command position
+        # Flag any remaining sudo occurrence in an executable line
         if echo "${line}" | grep -qE '\b(sudo|SUDO)\b'; then
-            first_word=$(echo "${line}" | awk '{print $1}')
-            if [[ "${first_word}" != sudo ]] && [[ "${first_word}" != SUDO ]]; then
-                ERRORS+=("sudo found in command in ${path}: ${line:0:80}")
-            fi
+            ERRORS+=("sudo found in command in ${path}: ${line:0:80}")
         fi
     done <<< "${non_comment_lines}"
 done
