@@ -282,6 +282,8 @@ require_c_mount() {
 
     main_uid="$(id --user "${MAIN_USERNAME}")"
     main_gid="$(id --group "${MAIN_USERNAME}")"
+    [[ ",${options}," == *",uid=${main_uid},"* ]] ||
+        die "uid монтирования ${C_MOUNT} не совпадает с UID ${MAIN_USERNAME} (${main_uid})"
     [[ ",${options}," == *",gid=${main_gid},"* ]] ||
         die "gid монтирования ${C_MOUNT} не совпадает с GID ${MAIN_USERNAME} (${main_gid})"
 }
@@ -316,7 +318,7 @@ apply_share_acl() {
         mode="$(stat --format='%a' "${path}")"
         drift=0
         [[ ${owner} == "${MAIN_USERNAME}:${SHARE_GROUP}" ]] || drift=1
-        [[ ${mode} == 770 || ${mode} == 2770 ]] || drift=1
+        [[ ${mode} == 2770 ]] || drift=1
         if [[ ${MODE} != apply ]]; then
             if (( drift )); then
                 printf 'WARNING: drift ACL/ownership для %s (owner=%s mode=%s)\n' "${path}" "${owner}" "${mode}"
