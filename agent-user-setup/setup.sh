@@ -136,9 +136,9 @@ EOF
       !in_block { print }
     ' "$target" > "$candidate"
   fi
-  if [[ -s "$candidate" ]] && [[ "$(tail -c 1 "$candidate")" != $'\n' ]]; then
-    printf '\n' >> "$candidate"
-  fi
+  if [[ -s "$candidate" ]] && [[ "$(tail -c 1 "$candidate" | wc -l)" -eq 0 ]]; then
+	  printf '\n' >> "$candidate"
+	fi
   cat "$block" >> "$candidate"
 
   if [[ -f "$target" ]] && cmp -s "$candidate" "$target"; then
