@@ -29,36 +29,38 @@ source "${CONFIG_FILE}"
 }
 
 
-# Проверка текущих монтирований drvfs.
-findmnt --type drvfs || true
-ls -ld /mnt/c /mnt/d
+check_environment() {
+    # Проверка текущих монтирований drvfs.
+    findmnt --type drvfs || true
+    ls -ld /mnt/c /mnt/d
 
-# Проверка разделения прав между пользователями.
-if ls /mnt/c >/dev/null 2>&1; then
-    echo "WARNING: ${SECOND_USERNAME} видит /mnt/c напрямую"
-else
-    echo "Access denied as expected"
-fi
-if [[ ${MODE} == apply ]]; then
-    touch /mnt/d/test && echo "Write access confirmed"
-    rm /mnt/d/test
-else
-    [[ -w /mnt/d ]] && echo "Write access available (no file created)" ||
-        printf 'WARNING: нет записи в /mnt/d\n' >&2
-fi
+    # Проверка разделения прав между пользователями.
+    if ls /mnt/c >/dev/null 2>&1; then
+        echo "WARNING: ${SECOND_USERNAME} видит /mnt/c напрямую"
+    else
+        echo "Access denied as expected"
+    fi
 
+    test_file="$(mktemp /mnt/d/.agent-write-test.XXXXXX)"
+    trap 'rm -f -- "${test_file}"' EXIT
+    printf 'ok\n' >"${test_file}"
+    printf 'Write access confirmed\n'
 
-# Bind-монтирования создаёт root-owned systemd-сервис из first.sh.
-for target in "${AGENT_MOUNT_TARGETS[@]}"; do
-    mountpoint --quiet "${target}" ||
-        printf 'WARNING: точка ещё не смонтирована: %s\n' "${target}" >&2
-done
+    # Bind-монтирования создаёт root-owned systemd-сервис из first.sh.
+    for target in "${AGENT_MOUNT_TARGETS[@]}"; do
+        mountpoint --quiet "${target}" ||
+            printf 'WARNING: точка ещё не смонтирована: %s\n' "${target}" >&2
+    done
+}
 
-# Запуск пользовательского скрипта без root только в apply-режиме.
+check_environment
+
+# Запуск пользовательского скрипта без root в выбранном режиме.
 if [[ ${MODE} == apply ]]; then
     bash setup.sh apply
-    # Перезапуск оболочки для обновления PATH и переменного окружения.
-    exec bash
+    printf 'Run: source ~/.bashrc\n'
+else
+    bash setup.sh check
 fi
 
 printf '\n===== Проверка пользовательских инструментов =====\n'
