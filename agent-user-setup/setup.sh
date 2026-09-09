@@ -190,9 +190,30 @@ EOF
 git lfs install
 
 # ---------- 8. ~/.bashrc: PATH, TZ, prompt (идемпотентно) ----------
+
 write_bashrc_if_changed
 
 bun install -g @oh-my-pi/pi-coding-agent
+
+# ---------- 8.5. Очистка временных файлов и кэшей ----------
+echo "→ Очистка временных файлов..."
+
+# 1. Системные пакеты и неиспользуемые зависимости APT
+sudo apt-get autoremove -y --purge
+sudo apt-get clean
+sudo rm -rf /var/lib/apt/lists/*
+
+# 2. Кэши пользовательских пакетов (pip, uv, bun, npm)
+rm -rf ~/.cache/pip
+rm -rf ~/.cache/uv
+rm -rf ~/.bun/install/cache
+sudo npm cache clean --force 2>/dev/null || true
+
+# 3. Временные нугеты и файлы .NET
+dotnet nuget locals all --clear >/dev/null 2>&1 || true
+
+# 4. Временные системные файлы
+sudo rm -rf /tmp/* /var/tmp/*
 
 # ---------- 9. Проверка ----------
 echo
