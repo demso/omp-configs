@@ -21,4 +21,33 @@ providers:
         name: DS V4 Flash 0731
       - id: gpt-5.6-luna
         name: GPT 5.6 Luna      
+  surplus:
+    baseUrl: https://api.surplusintelligence.ai/v1
+    api: openai-completions
+    apiKey: SURPLUS_KEY
+    models:
+      - id: deepseek-v4.1-flash
+        name: DeepSeek V4.1 Flash (surplus)
+        contextWindow: 1048576
+        maxTokens: 384000
+      - id: gpt-6-astra
+        name: GPT-6 Astra (surplus)
+        contextWindow: 1050000
+        maxTokens: 128000
+      - id: kimi-k2.7-code
+        name: Kimi K2.7 Code (surplus)
+        contextWindow: 262144
+        maxTokens: 262144
+      - id: gpt-5.6-luna
+        name: GPT-5.6 Luna (surplus)
+        contextWindow: 1050000
+        maxTokens: 128000
+      - id: gpt-5.6-sol
+        name: GPT-5.6 Sol (surplus)
+        contextWindow: 1050000
+        maxTokens: 128000
+      - id: glm-5.3-flash
+        name: GLM-5.3-Flash (surplus)
+        contextWindow: 1048576
+        maxTokens: 131072
 
