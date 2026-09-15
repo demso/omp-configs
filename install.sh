@@ -20,8 +20,16 @@ findmnt -nT "$MASTER/.agents" -o TARGET 2>/dev/null | grep -Fqx -- "$MASTER/.age
 
 AGENT_HOME="/home/$AGENT_USER"
 
+render() {
+  sed -e "s|@AGENT_HOME@|$AGENT_HOME|g" -e "s|@AGENT_DATA_ROOT@|$AGENT_DATA_ROOT|g" "$1"
+}
 
-# Все файлы OMP и общие данные используются напрямую через bind mounts,
+TEMPLATED=(
+  "omp/agent/config.yml.tmpl .omp/agent/config.yml"
+  "omp/agent/mcp.json.tmpl .omp/agent/mcp.json"
+)
+
+# Общие данные используются напрямую через bind mounts,
 # созданные agent-user-setup/first.sh.
 DIRS=(
   "agents/AGENTS.md .agents/AGENTS.md"
@@ -29,9 +37,18 @@ DIRS=(
 )
 
 push() {
-  mkdir -p "$MASTER/.agents"
+  mkdir -p "$MASTER/.omp/agent" "$MASTER/.agents"
 
-  local pair src dst
+  local pair src dst tmp
+  tmp="$(mktemp)"
+  trap 'rm -f "$tmp"' RETURN
+  for pair in "${TEMPLATED[@]}"; do
+    read -r src dst <<<"$pair"
+    render "$src" >"$tmp"
+    install -m 644 "$tmp" "$MASTER/$dst"
+    echo "push  $dst (шаблон)"
+  done
+
   for pair in "${DIRS[@]}"; do
     read -r src dst <<<"$pair"
     if [ -d "$src" ]; then
