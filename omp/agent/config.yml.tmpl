@@ -1,9 +1,9 @@
 providers:
   webSearchOrder:
-    - zai
     - duckduckgo
     - perplexity
     - gemini
+    - zai
     - anthropic
     - codex
     - xai
@@ -24,10 +24,15 @@ providers:
     - mojeek
     - public
 modelRoles:
-  smol: zai/glm-4.7-flash:high
-  tiny: zai/glm-4.7-flash:high
-  default: zai/glm-5.3-flash:high
-symbolPreset: unicode
+  smol: surplus/deepseek-v4.1-flash:high
+  tiny: surplus/deepseek-v4.1-flash:low
+  default: surplus/gpt-5.6-luna:high
+  task: surplus/deepseek-v4.1-flash:auto
+  advisor: surplus/deepseek-v4.1-flash:low
+  plan: surplus/gpt-5.6-sol:high
+  commit: surplus/deepseek-v4.1-flash:low
+  slow: surplus/gpt-5.6-sol:high
+symbolPreset: nerd
 composer:
   shape: claude
 theme:
@@ -41,7 +46,8 @@ plan:
 task:
   eager: default
   isolation:
-    mode: none
+    enabled: false
+  enableEffort: false
 sharpshooter:
   model: ""
 autolearn:
@@ -101,12 +107,6 @@ cycleOrder:
   - default
   - slow
 hideThinkingBlock: false
-disabledExtensions:
-  - skill:test-driven-development
-  - skill:requesting-code-review
-  - skill:receiving-code-review
-  - skill:finishing-a-development-branch
-  - skill:using-git-worktrees
 disabledProviders:
   - opencode
 read:
@@ -115,7 +115,11 @@ read:
     prose: true
 retry:
   fallbackChains:
-    default:
-      - zai-balance/glm-5.3-flash
+    {}
 extensions:
   - @AGENT_HOME@/.omp/extensions/superpowers
+enabledProviders:
+  []
+personality: pragmatic
+browser:
+  relay: true

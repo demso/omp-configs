@@ -1,10 +1,6 @@
 # Global Rules
 
-Global rules for opencode, applied across all sessions.
-
-## Coding Agent Workflow Reference
-
-Working-agreement doc with best practices for structuring tasks, session hygiene, skill capture, and review-before-commit: `C:\Users\koposov\.agents\docs\agent-best-practices.md`. Read its §2 gaps and apply them during work.
+Global rules for agents, applied across all sessions.
 
 ## NO TESTS BY DEFAULT: Tests Are a Separate Task
 
@@ -16,26 +12,6 @@ Working-agreement doc with best practices for structuring tasks, session hygiene
 - Existing tests: do not touch them and do not run them without an explicit request. Keep them compiling and passing only when a change forces it. If existing tests become outdated/invalid and there is no explicit request to maintain them, comment out the whole test file instead of updating or deleting it piecemeal.
 - Rationale: the current ~100+ tests are largely useless busywork. Effort goes into features and correctness, not into maintaining low-value tests.
 - Exception: if a change would BREAK existing tests, update those tests so the suite stays green — but do not add new ones.
-
-## MANDATORY: Switch Default Throws
-
-**Every `switch` statement or `switch` expression MUST have a `default`/`_` case that THROWS an exception. A silent fallback (returning a default value, an existing enum value's branch, `null`, etc.) is a bug — it hides new enum/kind values and routes them to the wrong place without any signal.**
-
-- Enumerate ALL known values explicitly in the switch; the default throws.
-- Use a domain-specific exception when one exists (e.g. `UnknownEntityKindException` in the catalog for `EntityKind` switches); otherwise create one or reuse an existing project exception — never fall back silently.
-- Applies to entity-kind switches (catalog tables) and any other enum/kind/value-object dispatch.
-- Only exception: switches over user-supplied strings that are validated before dispatch (e.g. a controller validating `kind` → 400 before the handler) may leave the throw as a defensive guard for internal callers.
-
-## MANDATORY: Keep the Roadmap Current
-
-**Every project keeps a single roadmap file — the one place for everything deferred, skipped for now, or planned-but-not-started. Always keep it up to date. An item that lives only in a ledger, review note, or commit message is effectively lost.**
-
-- Location convention: `<project>/.opencode/roadmap.md` (or the project's designated roadmap path in its AGENTS.md).
-- Whenever you defer, postpone, or deliberately skip a piece of work — add it to the roadmap right away, with a date and a pointer to the source file.
-- Whenever you complete a roadmap item — remove it (or move it to the changelog section).
-- Before marking a task/feature complete, check the roadmap for related items and update it.
-- If you find deferred work scattered across files that is not in the roadmap, consolidate it there.
-- This rule outranks convenience.
 
 ## Thinking & Coding Guidelines
 
@@ -102,9 +78,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 These guidelines are working if: fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
 
-### 5. Code Examples
 
-If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
 
 ## Workflow Rules
 
@@ -130,46 +104,12 @@ The user always pushes and merges (and creates PRs) themselves — never push, m
 
 Global rule about where documentation for tools and libraries used during development is stored.
 
-- All documentation about third-party tools and libraries is stored in `C:\Users\koposov\Documents\cline-files\DOCS`.
+- All documentation about third-party tools and libraries is stored in `/mnt/d/data/agent/DOCS`, if it's not there, ask user new location and edit this line.
+- All repository codebases of third-party tools and libraries in `/mnt/d/data/agent`, if it's not there, ask user new location and edit this line.
 - Inside `DOCS`, each folder is named after the tool/library (e.g. `DOCS/Quartz`, `DOCS/TickerQ`).
 - When documentation about a specific tool/library is needed, look in the corresponding folder in `DOCS` first, before searching the internet or asking the user.
 - If the documentation for the needed tool is not in `DOCS`, you may tell the user that the folder is missing.
 
 Examples:
 
-- Task involving Quartz, TickerQ, MediatR, EF Core, etc. → check `C:\Users\koposov\Documents\cline-files\DOCS\<tool name>`.
 - Question about a library API → look for ready examples/notes in its folder inside `DOCS`, rather than re-asking the user.
-
-## File Storage Conventions
-
-Where to save files and scripts you create, depending on whether the task is tied to the current project.
-
-### 1. External tasks (NOT related to the current project)
-
-When a task is not directly related to the project in the current working directory (e.g. fetching docs from external repos, one-off scripts, reference material), save ALL created files and scripts under:
-
-```
-C:\Users\koposov\Documents\cline-files\<group-name>\
-```
-
-Rules:
-
-- `<group-name>` is a short descriptive folder name you choose to group related files (e.g. "wolverine docs", "tickerq docs", "k8s helper").
-- Do NOT scatter such files across the project working directory.
-- If the group folder does not exist, create it.
-- Keep build scripts and intermediate files together with their outputs in that same folder.
-
-### 2. Project-related tasks (tied to the current project)
-
-When you create scripts, helper files, docs, or reference material related to the project itself (the repo in the current workspace), place them in the project's own:
-
-```
-./.opencode/
-```
-
-folder (relative to the project root), so they stay with the project and don't clutter the root.
-
-Final test for every file you write: ask "Is this tied to the current project?"
-
-- Yes → `./.opencode/`
-- No → `C:\Users\koposov\Documents\cline-files\<group-name>\`
