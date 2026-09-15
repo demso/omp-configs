@@ -126,6 +126,14 @@ for var in APT_MIRROR PYPI_MIRROR NPM_REGISTRY TZ_VALUE; do
     fi
 done
 
+for array_name in AGENT_MOUNT_SOURCES AGENT_MOUNT_TARGETS; do
+    if grep -qE "^${array_name}=\(" "$SCRIPT_DIR"/agent-setup.conf.example 2>/dev/null; then
+        echo "  ✓ ${array_name} defined"
+    else
+        ERRORS+=("${array_name} not found in agent-setup.conf.example")
+    fi
+done
+
 echo
 
 # Step 3: Summary

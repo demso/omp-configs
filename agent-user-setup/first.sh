@@ -55,26 +55,21 @@ source "${CONFIG_FILE}"
 : "${APT_MIRROR:?APT_MIRROR не задан}"
 : "${TZ_VALUE:?TZ_VALUE не задан}"
 
-declare -p C_ALLOWED_RELATIVE_PATHS >/dev/null 2>&1 ||
-    fail 'C_ALLOWED_RELATIVE_PATHS должен быть Bash-массивом'
+declare -p AGENT_MOUNT_SOURCES >/dev/null 2>&1 ||
+    fail 'AGENT_MOUNT_SOURCES должен быть Bash-массивом'
 declare -p AGENT_MOUNT_TARGETS >/dev/null 2>&1 ||
     fail 'AGENT_MOUNT_TARGETS должен быть Bash-массивом'
 
-
 AGENT_HOME="/home/${SECOND_USERNAME}"
+AGENT_CONFIG_ROOT="${AGENT_HOME}/.agent-config"
 C_MOUNT="/mnt/c"
 WINDOWS_PROFILE="${C_MOUNT}/Users/${WINDOWS_USERNAME}"
 SECOND_USER_MISSING=0
 
-C_ALLOWED_PATHS=()
-for relative_path in "${C_ALLOWED_RELATIVE_PATHS[@]}"; do
-    [[ ${relative_path} != /* && ${relative_path} != *..* ]] ||
-        fail "недопустимый относительный путь в конфигурации: ${relative_path}"
-    C_ALLOWED_PATHS+=("${WINDOWS_PROFILE}/${relative_path}")
-done
-
-[[ ${#C_ALLOWED_PATHS[@]} -eq ${#AGENT_MOUNT_TARGETS[@]} ]] ||
-    fail 'C_ALLOWED_RELATIVE_PATHS и AGENT_MOUNT_TARGETS должны иметь одинаковую длину'
+(( ${#AGENT_MOUNT_SOURCES[@]} > 0 )) ||
+    fail 'AGENT_MOUNT_SOURCES не должен быть пустым'
+[[ ${#AGENT_MOUNT_SOURCES[@]} -eq ${#AGENT_MOUNT_TARGETS[@]} ]] ||
+    fail 'AGENT_MOUNT_SOURCES и AGENT_MOUNT_TARGETS должны иметь одинаковую длину'
 
 FORBIDDEN_GROUPS=(sudo wheel docker lxd libvirt disk shadow adm kvm)
 log() {
@@ -291,49 +286,75 @@ require_c_mount() {
         die "gid монтирования ${C_MOUNT} не совпадает с GID ${MAIN_USERNAME} (${main_gid})"
 }
 
-validate_allowed_paths() {
-    log 'Проверка разрешённых каталогов C:'
+validate_mount_paths() {
+    log 'Проверка источников и точек bind-монтирования'
 
-    local base base_real resolved path
-    base="${C_MOUNT}/Users/${WINDOWS_USERNAME}"
-    [[ -d ${base} ]] || die "профиль Windows не найден: ${base}"
-    base_real="$(realpath --canonicalize-existing "${base}")"
+    local config_real windows_real source source_real target target_real index
+    local -A seen_targets=()
 
-    for path in "${C_ALLOWED_PATHS[@]}"; do
-        [[ -d ${path} ]] || die "каталог не найден: ${path}"
-        [[ ! -L ${path} ]] || die "разрешённый source-путь не должен быть symlink: ${path}"
+    [[ -d ${WINDOWS_PROFILE} ]] || die "профиль Windows не найден: ${WINDOWS_PROFILE}"
+    [[ -d ${AGENT_CONFIG_ROOT} ]] || die "репозиторий конфигурации не найден: ${AGENT_CONFIG_ROOT}"
+    windows_real="$(realpath --canonicalize-existing "${WINDOWS_PROFILE}")"
+    config_real="$(realpath --canonicalize-existing "${AGENT_CONFIG_ROOT}")"
 
-        resolved="$(realpath --canonicalize-existing "${path}")"
-        [[ ${resolved} == "${base_real}"/* ]] ||
-            die "каталог выходит за пределы профиля Windows: ${path}"
+    for index in "${!AGENT_MOUNT_SOURCES[@]}"; do
+        source="${AGENT_MOUNT_SOURCES[index]}"
+        target="${AGENT_MOUNT_TARGETS[index]}"
 
-        if [[ -n "$(find "${path}" -xdev -type l -print -quit)" ]]; then
-            die "разрешённый каталог содержит symlink/reparse point: ${path}"
+        [[ -e ${source} && ! -L ${source} && ( -d ${source} || -f ${source} ) ]] ||
+            die "source отсутствует, имеет неподдерживаемый тип или является symlink: ${source}"
+        source_real="$(realpath --canonicalize-existing "${source}")"
+        case "${source_real}" in
+            "${windows_real}"/*|"${config_real}"/*) ;;
+            *) die "source находится вне разрешённых корней: ${source}" ;;
+        esac
+
+        case "${target}" in
+            "${AGENT_HOME}/.agents"|"${AGENT_HOME}/.omp/"*|"${AGENT_HOME}/shared/"*) ;;
+            *) die "недопустимая точка монтирования: ${target}" ;;
+        esac
+        [[ ${target} != *'/../'* && ${target} != */.. && ${target} != *'/./'* ]] ||
+            die "точка монтирования содержит недопустимый компонент: ${target}"
+        [[ ! -L ${target} ]] || die "точка монтирования не должна быть symlink: ${target}"
+        target_real="$(realpath --canonicalize-missing "${target}")"
+        case "${target_real}" in
+            "${AGENT_HOME}/.agents"|"${AGENT_HOME}/.omp/"*|"${AGENT_HOME}/shared/"*) ;;
+            *) die "точка монтирования выходит за пределы разрешённых каталогов: ${target}" ;;
+        esac
+        [[ -z ${seen_targets["${target}"]+x} ]] ||
+            die "точка монтирования указана повторно: ${target}"
+        seen_targets["${target}"]=1
+
+        if [[ ${source_real} != "${windows_real}"/* ]]; then
+            runuser --user "${SECOND_USERNAME}" -- test -r "${source}" ||
+                die "${SECOND_USERNAME} не может читать source: ${source}"
+        fi
+
+        if [[ ${source_real} == "${windows_real}"/* ]] &&
+           [[ -d ${source} ]] &&
+           [[ -n "$(find "${source}" -xdev -type l -print -quit)" ]]; then
+            die "каталог Windows содержит symlink/reparse point: ${source}"
         fi
     done
 }
 
 apply_share_acl() {
-    log 'Настройка прав выбранных каталогов C:'
-    local path owner mode drift
-    for path in "${C_ALLOWED_PATHS[@]}"; do
-        owner="$(stat --format='%U:%G' "${path}")"
-        mode="$(stat --format='%a' "${path}")"
-        drift=0
-        [[ ${owner} == "${MAIN_USERNAME}:${SHARE_GROUP}" ]] || drift=1
-        [[ ${mode} == 2770 ]] || drift=1
+    log 'Настройка прав источников из профиля Windows'
+    local source owner
+    for source in "${AGENT_MOUNT_SOURCES[@]}"; do
+        [[ ${source} == "${WINDOWS_PROFILE}"/* ]] || continue
+        owner="$(stat --format='%U:%G' "${source}")"
         if [[ ${MODE} != apply ]]; then
-            if (( drift )); then
-                printf 'WARNING: drift ACL/ownership для %s (owner=%s mode=%s)\n' "${path}" "${owner}" "${mode}"
+            if [[ ${owner} != "${MAIN_USERNAME}:${SHARE_GROUP}" ]]; then
+                printf 'WARNING: drift ownership для %s (owner=%s)\n' "${source}" "${owner}"
             else
-                printf 'INFO: ACL/ownership в порядке: %s\n' "${path}"
+                printf 'INFO: ownership в порядке: %s\n' "${source}"
             fi
             continue
         fi
-        find "${path}" -xdev -exec chown "${MAIN_USERNAME}:${SHARE_GROUP}" {} +
-        find "${path}" -xdev -type d -exec chmod u+rwx,g+rwx,o-rwx {} +
-        find "${path}" -xdev -type f -exec chmod u+rw,g+rw,o-rwx {} +
-        find "${path}" -xdev -type d -exec chmod g+s {} +
+        find "${source}" -xdev -exec chown "${MAIN_USERNAME}:${SHARE_GROUP}" {} +
+        find "${source}" -xdev -type d -exec chmod u+rwx,g+rwx,o-rwx,g+s {} +
+        find "${source}" -xdev -type f -exec chmod u+rw,g+rw,o-rwx {} +
     done
     if [[ ${MODE} == apply ]]; then
         chmod 700 "${C_MOUNT}"
@@ -344,10 +365,10 @@ apply_share_acl() {
 unmount_existing_targets() {
     log 'Проверка старых bind-монтирований'
     local path
-    for path in "${AGENT_MOUNT_TARGETS[@]}"; do
+    local paths=("${AGENT_MOUNT_TARGETS[@]}" "${AGENT_HOME}/.omp")
+    for path in "${paths[@]}"; do
         if mountpoint --quiet "${path}"; then
             if [[ ${MODE} == apply ]]; then
-                # Only configured targets are ever eligible for unmount.
                 umount "${path}"
                 printf 'INFO: размонтировано: %s\n' "${path}"
             else
@@ -369,7 +390,8 @@ prepare_agent_home() {
         printf 'INFO: check mode; домашний каталог не изменяется.\n'
         return
     fi
-    local agent_group
+
+    local agent_group index legacy_env path source target
     agent_group="$(id --group --name "${SECOND_USERNAME}")"
     chown root:"${agent_group}" "${AGENT_HOME}"
     chmod 710 "${AGENT_HOME}"
@@ -380,16 +402,33 @@ prepare_agent_home() {
         -path "${AGENT_HOME}/.agents" -prune -o \
         -path "${AGENT_HOME}/shared" -prune -o \
         -exec setfacl --modify "u:${MAIN_USERNAME}:rwX,m::rwX,o::---" {} +
-    local path
+
     install --directory --owner="${SECOND_USERNAME}" --group="${agent_group}" --mode=700 \
-        "${AGENT_HOME}/.config" "${AGENT_HOME}/.cache" "${AGENT_HOME}/.local" "${AGENT_HOME}/work"
+        "${AGENT_HOME}/.config" "${AGENT_HOME}/.cache" "${AGENT_HOME}/.local" \
+        "${AGENT_HOME}/work" "${AGENT_HOME}/shared" "${AGENT_HOME}/.omp"
     for path in "${AGENT_HOME}/.config" "${AGENT_HOME}/.cache" "${AGENT_HOME}/.local" "${AGENT_HOME}/work"; do
         setfacl --modify "u:${MAIN_USERNAME}:rwx,m::rwx" "${path}"
         setfacl --modify "d:u:${MAIN_USERNAME}:rwx,d:m::rwx,d:o::---" "${path}"
     done
-    install --directory --owner=root --group=root --mode=700 \
-        "${AGENT_HOME}/shared" "${AGENT_HOME}/.omp" "${AGENT_HOME}/.agents" \
-        "${AGENT_HOME}/shared/downloads" "${AGENT_HOME}/shared/screenshots"
+
+    for index in "${!AGENT_MOUNT_SOURCES[@]}"; do
+        source="${AGENT_MOUNT_SOURCES[index]}"
+        target="${AGENT_MOUNT_TARGETS[index]}"
+        if [[ ! -d $(dirname -- "${target}") ]]; then
+            install --directory --owner="${SECOND_USERNAME}" --group="${agent_group}" --mode=700 \
+                "$(dirname -- "${target}")"
+        fi
+        if [[ -d ${source} ]]; then
+            [[ ! -e ${target} || -d ${target} ]] || die "target должен быть каталогом: ${target}"
+            install --directory --owner="${SECOND_USERNAME}" --group="${agent_group}" --mode=700 "${target}"
+        else
+            [[ ! -e ${target} || -f ${target} ]] || die "target должен быть обычным файлом: ${target}"
+            if [[ ! -e ${target} ]]; then
+                install --owner="${SECOND_USERNAME}" --group="${agent_group}" --mode=600 /dev/null "${target}"
+            fi
+        fi
+    done
+
 }
 
 
@@ -421,37 +460,52 @@ configure_git() {
 
 install_mount_script() {
     log 'Установка root-скрипта bind-монтирования'
-    local script_path=/usr/local/sbin/agent-wsl-mounts tmp
+    local script_path=/usr/local/sbin/agent-wsl-mounts tmp path
     tmp="$(mktemp)"
-    cat > "${tmp}" <<EOF
+    cat > "${tmp}" <<'EOF'
 #!/usr/bin/env bash
 
 set -Eeuo pipefail
 umask 027
 
 SOURCE_PATHS=(
-    "${C_ALLOWED_PATHS[0]}"
-    "${C_ALLOWED_PATHS[1]}"
-    "${C_ALLOWED_PATHS[2]}"
-    "${C_ALLOWED_PATHS[3]}"
+EOF
+    for path in "${AGENT_MOUNT_SOURCES[@]}"; do
+        printf '    %q\n' "${path}" >> "${tmp}"
+    done
+    cat >> "${tmp}" <<'EOF'
 )
 TARGET_PATHS=(
-    "${AGENT_MOUNT_TARGETS[0]}"
-    "${AGENT_MOUNT_TARGETS[1]}"
-    "${AGENT_MOUNT_TARGETS[2]}"
-    "${AGENT_MOUNT_TARGETS[3]}"
+EOF
+    for path in "${AGENT_MOUNT_TARGETS[@]}"; do
+        printf '    %q\n' "${path}" >> "${tmp}"
+    done
+    cat >> "${tmp}" <<'EOF'
 )
-[[ \${#SOURCE_PATHS[@]} -eq \${#TARGET_PATHS[@]} ]] || exit 1
+[[ ${#SOURCE_PATHS[@]} -eq ${#TARGET_PATHS[@]} ]] || exit 1
+
 mount_one() {
-    local source="\$1" target="\$2"
-    [[ -d "\$source" ]] || { printf 'Source directory does not exist: %s\\n' "\$source" >&2; return 1; }
-    [[ -d "\$target" && ! -L "\$target" ]] || { printf 'Invalid mount target: %s\\n' "\$target" >&2; return 1; }
-    if mountpoint --quiet "\$target"; then return 0; fi
-    mount --bind "\$source" "\$target"
+    local source="$1" target="$2"
+    [[ -e "$source" && ! -L "$source" ]] || {
+        printf 'Invalid mount source: %s\n' "$source" >&2
+        return 1
+    }
+    [[ -e "$target" && ! -L "$target" ]] || {
+        printf 'Invalid mount target: %s\n' "$target" >&2
+        return 1
+    }
+    if [[ -d "$source" ]]; then
+        [[ -d "$target" ]] || { printf 'Mount target is not a directory: %s\n' "$target" >&2; return 1; }
+    else
+        [[ -f "$target" ]] || { printf 'Mount target is not a file: %s\n' "$target" >&2; return 1; }
+    fi
+    if mountpoint --quiet "$target"; then return 0; fi
+    mount --bind "$source" "$target"
 }
+
 chmod 700 /mnt/c
-for index in "\${!SOURCE_PATHS[@]}"; do
-    mount_one "\${SOURCE_PATHS[\$index]}" "\${TARGET_PATHS[\$index]}"
+for index in "${!SOURCE_PATHS[@]}"; do
+    mount_one "${SOURCE_PATHS[$index]}" "${TARGET_PATHS[$index]}"
 done
 EOF
     if [[ ${MODE} == check ]]; then
@@ -473,7 +527,7 @@ install_systemd_unit() {
     tmp="$(mktemp)"
     cat > "${tmp}" <<'EOF'
 [Unit]
-Description=Mount selected Windows directories for agent
+Description=Mount shared configuration and Windows directories for agent
 After=local-fs.target
 RequiresMountsFor=/mnt/c
 
@@ -514,7 +568,7 @@ start_mount_service_if_possible() {
                 printf 'WARNING: mount-сервис не включён.\n'
         fi
         for path in "${AGENT_MOUNT_TARGETS[@]}"; do
-            mountpoint --quiet "${path}" || printf 'WARNING: каталог не смонтирован: %s\n' "${path}"
+            mountpoint --quiet "${path}" || printf 'WARNING: точка не смонтирована: %s\n' "${path}"
         done
         return
     fi
@@ -522,9 +576,9 @@ start_mount_service_if_possible() {
         printf 'INFO: systemd ещё не запущен; проверка mount-сервиса отложена до перезапуска WSL.\n'
         return
     fi
-    systemctl start agent-wsl-mounts.service
+    systemctl restart agent-wsl-mounts.service
     for path in "${AGENT_MOUNT_TARGETS[@]}"; do
-        mountpoint --quiet "${path}" || die "каталог не смонтирован: ${path}"
+        mountpoint --quiet "${path}" || die "точка не смонтирована: ${path}"
     done
     if runuser --user "${SECOND_USERNAME}" -- test -x "${C_MOUNT}"; then
         die "${SECOND_USERNAME} может напрямую проходить в ${C_MOUNT}"
@@ -545,9 +599,16 @@ write_checks() {
         die "${SECOND_USERNAME} не состоит в ${SHARE_GROUP}; нужна новая сессия"
     [[ $(stat --format='%a' "${C_MOUNT}") == 700 ]] ||
         die "${C_MOUNT} не закрыт режимом 700"
-    local path
-    for path in "${AGENT_MOUNT_TARGETS[@]}"; do
-        [[ -d ${path} && ! -L ${path} ]] || die "некорректная точка монтирования: ${path}"
+    local index path source
+    for index in "${!AGENT_MOUNT_TARGETS[@]}"; do
+        source="${AGENT_MOUNT_SOURCES[index]}"
+        path="${AGENT_MOUNT_TARGETS[index]}"
+        [[ -e ${path} && ! -L ${path} ]] || die "некорректная точка монтирования: ${path}"
+        if [[ -d ${source} ]]; then
+            [[ -d ${path} ]] || die "точка монтирования должна быть каталогом: ${path}"
+        else
+            [[ -f ${path} ]] || die "точка монтирования должна быть файлом: ${path}"
+        fi
     done
     if [[ ${MODE} == apply ]]; then
         printf '\nНастройка выполнена.\n'
@@ -606,7 +667,7 @@ main() {
     assert_no_sudo_access
     ensure_share_group
     require_c_mount
-    validate_allowed_paths
+    validate_mount_paths
     apply_share_acl
     unmount_existing_targets
     prepare_agent_home

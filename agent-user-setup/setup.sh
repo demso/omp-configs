@@ -58,7 +58,7 @@ echo "→ ls-инструмент: ${LS_PKG}"
 # invoking installers or changing any files.
 if [[ ${MODE} == check ]]; then
   export PATH="$HOME/.bun/bin:$HOME/.local/bin:$HOME/.dotnet:$HOME/.dotnet/tools:$PATH"
-  for c in python fd bat fzf rg "${LS_PKG}" jq git go psql node npm pnpm bun uv dotnet dotnet-ef csharp-ls; do
+  for c in python fd bat fzf rg "${LS_PKG}" jq git go psql node npm pnpm bun uv dotnet dotnet-ef csharp-ls omp; do
     p="$(command -v "$c" 2>/dev/null || true)"
     printf '  %-24s %s\n' "$c" "${p:-НЕ НАЙДЕН}"
   done
@@ -195,35 +195,19 @@ write_bashrc_if_changed
 
 bun install -g @oh-my-pi/pi-coding-agent
 
-# ---------- 8.5. Очистка временных файлов и кэшей ----------
-echo "→ Очистка временных файлов..."
+# Рендерит приватные config.yml/mcp.json и обновляет общий каталог .agents.
+bash "$HOME/.agent-config/install.sh" push
 
-# 1. Системные пакеты и неиспользуемые зависимости APT
-sudo apt-get autoremove -y --purge
-sudo apt-get clean
-sudo rm -rf /var/lib/apt/lists/*
-
-# 2. Кэши пользовательских пакетов (pip, uv, bun, npm)
-rm -rf ~/.cache/pip
-rm -rf ~/.cache/uv
-rm -rf ~/.bun/install/cache
-sudo npm cache clean --force 2>/dev/null || true
-
-# 3. Временные нугеты и файлы .NET
-dotnet nuget locals all --clear >/dev/null 2>&1 || true
-
-# 4. Временные системные файлы
-sudo rm -rf /tmp/* /var/tmp/*
 
 # ---------- 9. Проверка ----------
 echo
 echo "===== Проверка (по завершении открой новое окно терминала или: source ~/.bashrc) ====="
-for c in python fd bat fzf rg "${LS_PKG}" jq git go psql node npm pnpm bun uv dotnet dotnet-ef csharp-ls; do
+for c in python fd bat fzf rg "${LS_PKG}" jq git go psql node npm pnpm bun uv dotnet dotnet-ef csharp-ls omp; do
   p="$(command -v "$c" 2>/dev/null || true)"
   printf '  %-10s %s\n' "$c" "${p:-НЕ НАЙДЕН}"
 done
 echo
-echo "command -v python fd bat eza fzf rg jq git go psql node npm pnpm bun uv dotnet dotnet-ef csharp-ls"
+echo "command -v python fd bat eza fzf rg jq git go psql node npm pnpm bun uv dotnet dotnet-ef csharp-ls omp"
 echo
 echo "ℹ Python на 26.04 externally-managed (PEP 668): pip — только в venv,"
 echo "  утилиты ставь через 'uv tool install'."

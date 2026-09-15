@@ -31,17 +31,24 @@ PYPI_MIRROR="https://mirror.yandex.ru/pypi/web/simple/"
 NPM_REGISTRY="https://registry.npmmirror.com"
 TZ_VALUE="Europe/Moscow"
 
-# Относительные каталоги внутри C:/Users/WINDOWS_USERNAME.
-C_ALLOWED_RELATIVE_PATHS=(
-    ".omp"
-    ".agents"
-    "Downloads"
-    "Documents/ShareX/Screenshots"
+# Общие данные OMP берутся из профиля Windows. Приватные конфиги,
+# credentials, базы, сессии и логи внутри .omp остаются локальными для agent.
+AGENT_MOUNT_SOURCES=(
+    "/home/${SECOND_USERNAME}/.agent-config/omp/agent/models.yml"
+    "/home/${SECOND_USERNAME}/.agent-config/omp/agent/RULES.md"
+    "/home/${SECOND_USERNAME}/.agent-config/omp/agent/managed-skills"
+    "/home/${SECOND_USERNAME}/.agent-config/omp/extensions/superpowers"
+    "/mnt/c/Users/${WINDOWS_USERNAME}/.agents"
+    "/mnt/c/Users/${WINDOWS_USERNAME}/Downloads"
+    "/mnt/c/Users/${WINDOWS_USERNAME}/Documents/ShareX/Screenshots"
 )
 
-# Точки монтирования внутри /home/SECOND_USERNAME.
+# Соответствующие точки монтирования внутри /home/SECOND_USERNAME.
 AGENT_MOUNT_TARGETS=(
-    "/home/${SECOND_USERNAME}/.omp"
+    "/home/${SECOND_USERNAME}/.omp/agent/models.yml"
+    "/home/${SECOND_USERNAME}/.omp/agent/RULES.md"
+    "/home/${SECOND_USERNAME}/.omp/agent/managed-skills"
+    "/home/${SECOND_USERNAME}/.omp/extensions/superpowers"
     "/home/${SECOND_USERNAME}/.agents"
     "/home/${SECOND_USERNAME}/shared/downloads"
     "/home/${SECOND_USERNAME}/shared/screenshots"

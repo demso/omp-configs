@@ -23,6 +23,11 @@ source "${CONFIG_FILE}"
 : "${SECOND_USERNAME:?SECOND_USERNAME не задан}"
 : "${WINDOWS_USERNAME:?WINDOWS_USERNAME не задан}"
 
+declare -p AGENT_MOUNT_TARGETS >/dev/null 2>&1 || {
+    printf 'ERROR: AGENT_MOUNT_TARGETS должен быть Bash-массивом\n' >&2
+    exit 1
+}
+
 [[ $(id --user --name) == "${SECOND_USERNAME}" ]] || {
     printf 'ERROR: запустите second.sh от имени %s\n' "${SECOND_USERNAME}" >&2
     exit 1
@@ -64,7 +69,7 @@ else
 fi
 
 printf '\n===== Проверка пользовательских инструментов =====\n'
-for command_name in python fd bat eza fzf rg jq git go psql node npm pnpm bun uv dotnet dotnet-ef csharp-ls; do
+for command_name in python fd bat eza fzf rg jq git go psql node npm pnpm bun uv dotnet dotnet-ef csharp-ls omp; do
     command_path="$(command -v "${command_name}" 2>/dev/null || true)"
     printf '  %-14s %s\n' "${command_name}" "${command_path:-НЕ НАЙДЕН}"
 done
