@@ -32,17 +32,17 @@ providers:
         input: [text, image]
         contextWindow: 1048576
         maxTokens: 384000
-      - id: gpt-6-astra
-        name: GPT-6 Astra (surplus)
-        reasoning: true
-        input: [text, image]
-        contextWindow: 1050000
-        maxTokens: 128000
       - id: kimi-k2.7-code
         name: Kimi K2.7 Code (surplus)
         reasoning: true
         input: [text, image]
         contextWindow: 262144
+        maxTokens: 262144
+      - id: kimi-k3
+        name: Kimi K3 (surplus)
+        reasoning: true
+        input: [text, image]
+        contextWindow: 1050000
         maxTokens: 262144
       - id: gpt-5.6-luna
         name: GPT-5.6 Luna (surplus)
@@ -52,6 +52,12 @@ providers:
         maxTokens: 128000
       - id: gpt-5.6-sol
         name: GPT-5.6 Sol (surplus)
+        reasoning: true
+        input: [text, image]
+        contextWindow: 1050000
+        maxTokens: 128000
+      - id: gpt-6-astra
+        name: GPT-6 Astra (surplus)
         reasoning: true
         input: [text, image]
         contextWindow: 1050000
