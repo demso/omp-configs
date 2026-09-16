@@ -20,11 +20,19 @@ providers:
       - id: deepseek-v4-flash-0731
         name: DS V4 Flash 0731
       - id: gpt-5.6-luna
-        name: GPT 5.6 Luna      
+        name: GPT 5.6 Luna
   surplus:
     baseUrl: https://api.surplusintelligence.ai/v1
     api: openai-completions
     apiKey: SURPLUS_KEY
+    headers:
+      X-Min-Discount: '40'
+    compat:
+      extraBody:
+        si_route:
+          objective: latency
+          price_tolerance_pct: 1
+          max_latency_ms: 100000
     models:
       - id: deepseek-v4.1-flash
         name: DeepSeek V4.1 Flash (surplus)
@@ -32,40 +40,87 @@ providers:
         input: [text, image]
         contextWindow: 1048576
         maxTokens: 384000
+        compat:
+          extraBody:
+            min_discount_pct: 60
+            si_route:
+              objective: latency
+              price_tolerance_pct: 4
+        
       - id: kimi-k2.7-code
         name: Kimi K2.7 Code (surplus)
         reasoning: true
         input: [text, image]
         contextWindow: 262144
         maxTokens: 262144
+        compat:
+          extraBody:
+            min_discount_pct: 85
+            si_route:
+              objective: latency
+              price_tolerance_pct: 3
+        
       - id: kimi-k3
         name: Kimi K3 (surplus)
         reasoning: true
         input: [text, image]
         contextWindow: 1050000
         maxTokens: 262144
+        compat:
+          extraBody:
+            min_discount_pct: 93
+            si_route:
+              objective: latency
+              price_tolerance_pct: 2
+        
       - id: gpt-5.6-luna
         name: GPT-5.6 Luna (surplus)
         reasoning: true
         input: [text, image]
         contextWindow: 1050000
         maxTokens: 128000
+        compat:
+          extraBody:
+            min_discount_pct: 80
+            si_route:
+              objective: latency
+              price_tolerance_pct: 3
+
       - id: gpt-5.6-sol
         name: GPT-5.6 Sol (surplus)
         reasoning: true
         input: [text, image]
         contextWindow: 1050000
         maxTokens: 128000
+        compat:
+          extraBody:
+            min_discount_pct: 93
+            si_route:
+              objective: latency
+              price_tolerance_pct: 2
+
       - id: gpt-6-astra
         name: GPT-6 Astra (surplus)
         reasoning: true
         input: [text, image]
         contextWindow: 1050000
         maxTokens: 128000
+        compat:
+          extraBody:
+            min_discount_pct: 93
+            si_route:
+              objective: latency
+              price_tolerance_pct: 1
+              
       - id: glm-5.3-flash
         name: GLM-5.3-Flash (surplus)
         reasoning: true
         input: [text, image]
         contextWindow: 1048576
         maxTokens: 131072
-
+        compat:
+          extraBody:
+            min_discount_pct: 60
+            si_route:
+              objective: latency
+              price_tolerance_pct: 4
