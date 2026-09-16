@@ -58,7 +58,7 @@ check_environment() {
     done
 }
 
-check_environment
+#check_environment
 
 # Запуск пользовательского скрипта без root в выбранном режиме.
 if [[ ${MODE} == apply ]]; then

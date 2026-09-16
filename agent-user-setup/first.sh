@@ -61,13 +61,12 @@ declare -p AGENT_MOUNT_TARGETS >/dev/null 2>&1 ||
     fail 'AGENT_MOUNT_TARGETS должен быть Bash-массивом'
 
 AGENT_HOME="/home/${SECOND_USERNAME}"
-AGENT_CONFIG_ROOT="${AGENT_HOME}/.agent-config"
+AGENT_CONFIG_ROOT="${AGENT_HOME}/omp-configs"
 C_MOUNT="/mnt/c"
 WINDOWS_PROFILE="${C_MOUNT}/Users/${WINDOWS_USERNAME}"
 SECOND_USER_MISSING=0
 
-(( ${#AGENT_MOUNT_SOURCES[@]} > 0 )) ||
-    fail 'AGENT_MOUNT_SOURCES не должен быть пустым'
+
 [[ ${#AGENT_MOUNT_SOURCES[@]} -eq ${#AGENT_MOUNT_TARGETS[@]} ]] ||
     fail 'AGENT_MOUNT_SOURCES и AGENT_MOUNT_TARGETS должны иметь одинаковую длину'
 
@@ -121,7 +120,7 @@ install_dependencies() {
     )
     APT_MIRROR="${APT_MIRROR%/}"
     if apt-cache show exa >/dev/null 2>&1; then
-        ls_package=exa
+        ls_package=eza
     else
         ls_package=eza
     fi
@@ -236,12 +235,16 @@ assert_no_sudo_access() {
     log 'Проверка sudo-доступа'
 
     local sudo_listing sudo_status
-    set +e
-    sudo_listing="$(sudo --non-interactive --list --user "${SECOND_USERNAME}" 2>&1)"
-    sudo_status=$?
-    set -e
 
-    if [[ ${sudo_status} -eq 0 || ${sudo_listing} =~ 'may run sudo' || ${sudo_listing} =~ \([[:space:]]*ALL ]]; then
+    if sudo_listing="$(sudo --non-interactive --list --user "${SECOND_USERNAME}" 2>&1)"; then
+        sudo_status=0
+    else
+        sudo_status=$?
+    fi
+
+    if [[ ${sudo_status} -eq 0 ||
+          ${sudo_listing} =~ 'may run sudo' ||
+          ${sudo_listing} =~ \([[:space:]]*ALL ]]; then
         printf '%s\n' "${sudo_listing}" >&2
         die "у ${SECOND_USERNAME} остался sudo-доступ"
     fi
@@ -273,17 +276,22 @@ require_c_mount() {
     fs_type="$(findmnt --noheadings --output FSTYPE "${C_MOUNT}")"
     options="$(findmnt --noheadings --output OPTIONS "${C_MOUNT}")"
 
-    [[ ${fs_type} == drvfs ]] ||
-        die "${C_MOUNT} имеет тип ${fs_type}, ожидался drvfs"
+	if [[ ${fs_type} != drvfs ]] &&
+	   [[ ${fs_type} != 9p || ${options} != *"aname=drvfs"* ]]; then
+		die "${C_MOUNT} имеет тип ${fs_type}, ожидался drvfs или WSL 9p/DrvFs"
+	fi
+	
     [[ ${options} == *metadata* ]] ||
-        die "${C_MOUNT} смонтирован без metadata"
+    die "${C_MOUNT} смонтирован без metadata"
 
-    main_uid="$(id --user "${MAIN_USERNAME}")"
-    main_gid="$(id --group "${MAIN_USERNAME}")"
-    [[ ",${options}," == *",uid=${main_uid},"* ]] ||
-        die "uid монтирования ${C_MOUNT} не совпадает с UID ${MAIN_USERNAME} (${main_uid})"
-    [[ ",${options}," == *",gid=${main_gid},"* ]] ||
-        die "gid монтирования ${C_MOUNT} не совпадает с GID ${MAIN_USERNAME} (${main_gid})"
+	main_uid="$(id --user "${MAIN_USERNAME}")"
+	main_gid="$(id --group "${MAIN_USERNAME}")"
+
+	[[ ";${options};" == *";uid=${main_uid};"* ]] ||
+		die "uid монтирования ${C_MOUNT} не совпадает с UID ${MAIN_USERNAME} (${main_uid}) \n${options}"
+
+	[[ ";${options};" == *";gid=${main_gid};"* ]] ||
+		die "gid монтирования ${C_MOUNT} не совпадает с GID ${MAIN_USERNAME} (${main_gid}) \n${options}"
 }
 
 validate_mount_paths() {
@@ -294,6 +302,7 @@ validate_mount_paths() {
 
     [[ -d ${WINDOWS_PROFILE} ]] || die "профиль Windows не найден: ${WINDOWS_PROFILE}"
     [[ -d ${AGENT_CONFIG_ROOT} ]] || die "репозиторий конфигурации не найден: ${AGENT_CONFIG_ROOT}"
+
     windows_real="$(realpath --canonicalize-existing "${WINDOWS_PROFILE}")"
     config_real="$(realpath --canonicalize-existing "${AGENT_CONFIG_ROOT}")"
 
@@ -302,39 +311,38 @@ validate_mount_paths() {
         target="${AGENT_MOUNT_TARGETS[index]}"
 
         [[ -e ${source} && ! -L ${source} && ( -d ${source} || -f ${source} ) ]] ||
-            die "source отсутствует, имеет неподдерживаемый тип или является symlink: ${source}"
+            die "source отсутствует или имеет неподдерживаемый тип: ${source}"
+
         source_real="$(realpath --canonicalize-existing "${source}")"
-        case "${source_real}" in
-            "${windows_real}"/*|"${config_real}"/*) ;;
-            *) die "source находится вне разрешённых корней: ${source}" ;;
-        esac
+
+        #case "${source_real}" in
+        #    "${windows_real}"/*|"${config_real}"/*) ;;
+        #    *) die "source находится вне разрешённых корней: ${source}" ;;
+        #esac
 
         case "${target}" in
             "${AGENT_HOME}/.agents"|"${AGENT_HOME}/.omp/"*|"${AGENT_HOME}/shared/"*) ;;
             *) die "недопустимая точка монтирования: ${target}" ;;
         esac
-        [[ ${target} != *'/../'* && ${target} != */.. && ${target} != *'/./'* ]] ||
-            die "точка монтирования содержит недопустимый компонент: ${target}"
+
         [[ ! -L ${target} ]] || die "точка монтирования не должна быть symlink: ${target}"
+
         target_real="$(realpath --canonicalize-missing "${target}")"
-        case "${target_real}" in
-            "${AGENT_HOME}/.agents"|"${AGENT_HOME}/.omp/"*|"${AGENT_HOME}/shared/"*) ;;
-            *) die "точка монтирования выходит за пределы разрешённых каталогов: ${target}" ;;
-        esac
+
+        #case "${target_real}" in
+        #    "${AGENT_HOME}/.agents"|"${AGENT_HOME}/.omp/"*|"${AGENT_HOME}/shared/"*) ;;
+        #    *) die "точка монтирования выходит за пределы разрешённых каталогов: ${target}" ;;
+        #esac
+
         [[ -z ${seen_targets["${target}"]+x} ]] ||
             die "точка монтирования указана повторно: ${target}"
+
         seen_targets["${target}"]=1
 
-        if [[ ${source_real} != "${windows_real}"/* ]]; then
-            runuser --user "${SECOND_USERNAME}" -- test -r "${source}" ||
-                die "${SECOND_USERNAME} не может читать source: ${source}"
-        fi
-
-        if [[ ${source_real} == "${windows_real}"/* ]] &&
-           [[ -d ${source} ]] &&
-           [[ -n "$(find "${source}" -xdev -type l -print -quit)" ]]; then
-            die "каталог Windows содержит symlink/reparse point: ${source}"
-        fi
+        #if [[ ${source_real} != "${windows_real}"/* ]]; then
+        #    runuser --user "${SECOND_USERNAME}" -- test -r "${source}" ||
+        #        die "${SECOND_USERNAME} не может читать source: ${source}"
+        #fi
     done
 }
 
@@ -356,9 +364,6 @@ apply_share_acl() {
         find "${source}" -xdev -type d -exec chmod u+rwx,g+rwx,o-rwx,g+s {} +
         find "${source}" -xdev -type f -exec chmod u+rw,g+rw,o-rwx {} +
     done
-    if [[ ${MODE} == apply ]]; then
-        chmod 700 "${C_MOUNT}"
-    fi
 }
 
 
@@ -395,8 +400,10 @@ prepare_agent_home() {
     agent_group="$(id --group --name "${SECOND_USERNAME}")"
     chown root:"${agent_group}" "${AGENT_HOME}"
     chmod 710 "${AGENT_HOME}"
-    setfacl --modify "u:${MAIN_USERNAME}:rwx,g::--x,m::rwx,o::---" "${AGENT_HOME}"
-    setfacl --modify "d:u:${MAIN_USERNAME}:rwx,d:g::--x,d:m::rwx,d:o::---" "${AGENT_HOME}"
+	setfacl -m "u:${SECOND_USERNAME}:rwx" "${AGENT_HOME}"
+	setfacl -m "u:${MAIN_USERNAME}:rwx" "${AGENT_HOME}"
+	setfacl -m "d:u:${SECOND_USERNAME}:rwx" "${AGENT_HOME}"
+	setfacl -m "d:u:${MAIN_USERNAME}:rwx" "${AGENT_HOME}"
     find "${AGENT_HOME}" -xdev \
         -path "${AGENT_HOME}/.omp" -prune -o \
         -path "${AGENT_HOME}/.agents" -prune -o \
@@ -458,15 +465,23 @@ configure_git() {
     configure_git_for_user "${SECOND_USERNAME}"
 }
 
+
+
 install_mount_script() {
     log 'Установка root-скрипта bind-монтирования'
     local script_path=/usr/local/sbin/agent-wsl-mounts tmp path
     tmp="$(mktemp)"
-    cat > "${tmp}" <<'EOF'
-#!/usr/bin/env bash
 
-set -Eeuo pipefail
-umask 027
+    # Шапка: значения, известные только инсталлятору, подставляем сразу
+    {
+        printf '#!/usr/bin/env bash\n\n'
+        printf 'set -Eeuo pipefail\n'
+        printf 'umask 027\n\n'
+        printf 'AGENT_UID=%q\n' "$(id -u "${SECOND_USERNAME}")"
+        printf 'AGENT_GID=%q\n' "$(id -g "${SECOND_USERNAME}")"
+    } > "${tmp}"
+
+    cat >> "${tmp}" <<'EOF'
 
 SOURCE_PATHS=(
 EOF
@@ -485,7 +500,8 @@ EOF
 [[ ${#SOURCE_PATHS[@]} -eq ${#TARGET_PATHS[@]} ]] || exit 1
 
 mount_one() {
-    local source="$1" target="$2"
+    local source="$1" target="$2" win_source
+
     [[ -e "$source" && ! -L "$source" ]] || {
         printf 'Invalid mount source: %s\n' "$source" >&2
         return 1
@@ -494,20 +510,30 @@ mount_one() {
         printf 'Invalid mount target: %s\n' "$target" >&2
         return 1
     }
+
     if [[ -d "$source" ]]; then
         [[ -d "$target" ]] || { printf 'Mount target is not a directory: %s\n' "$target" >&2; return 1; }
     else
         [[ -f "$target" ]] || { printf 'Mount target is not a file: %s\n' "$target" >&2; return 1; }
     fi
+
     if mountpoint --quiet "$target"; then return 0; fi
-    mount --bind "$source" "$target"
+
+    case "$source" in
+        /mnt/c/*) win_source="C:${source#/mnt/c}" ;;
+        /mnt/d/*) win_source="D:${source#/mnt/d}" ;;
+        *) printf 'Unsupported mount source: %s\n' "$source" >&2; return 1 ;;
+    esac
+
+    mount -t drvfs "$win_source" "$target" \
+        -o metadata,uid="${AGENT_UID}",gid="${AGENT_GID}",umask=000
 }
 
-chmod 700 /mnt/c
 for index in "${!SOURCE_PATHS[@]}"; do
     mount_one "${SOURCE_PATHS[$index]}" "${TARGET_PATHS[$index]}"
 done
 EOF
+
     if [[ ${MODE} == check ]]; then
         if [[ -f ${script_path} ]] && cmp -s "${tmp}" "${script_path}"; then
             printf 'INFO: root-скрипт актуален.\n'

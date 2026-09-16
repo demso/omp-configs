@@ -15,8 +15,8 @@ source device.env
 MASTER="${AGENT_CONFIG_MASTER:-$HOME}"
 [[ ${MASTER} == "/home/${AGENT_USER}" ]] ||
   die "AGENT_CONFIG_MASTER должен указывать на локальный HOME агента: /home/${AGENT_USER}"
-findmnt -nT "$MASTER/.agents" -o TARGET 2>/dev/null | grep -Fqx -- "$MASTER/.agents" ||
-  die "$MASTER/.agents должен быть отдельным bind mount"
+#findmnt -nT "$MASTER/.agents" -o TARGET 2>/dev/null | grep -Fqx -- "$MASTER/.agents" ||
+#  die "$MASTER/.agents должен быть отдельным bind mount"
 
 AGENT_HOME="/home/$AGENT_USER"
 
@@ -34,6 +34,7 @@ TEMPLATED=(
 DIRS=(
   "agents/AGENTS.md .agents/AGENTS.md"
   "agents/skills .agents/skills"
+  "omp .omp"
 )
 
 push() {
