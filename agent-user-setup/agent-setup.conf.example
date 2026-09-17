@@ -18,6 +18,9 @@ WINDOWS_USERNAME="koposov"
 # Пользователь, под которым запускаются агенты.
 SECOND_USERNAME="agent"
 
+# Общая Unix-группа для основного пользователя и агента.
+SHARE_GROUP="agent-share"
+
 # Git-настройки для пользователя.
 GIT_NAME="Agent"
 GIT_EMAIL="agent@example.com"

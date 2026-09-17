@@ -32,7 +32,6 @@ umask 027
 CONFIG_FILE="/etc/agent-setup.conf"
 MOUNT_UNIT="/etc/systemd/system/agent-wsl-mounts.service"
 MOUNT_SCRIPT="/usr/local/sbin/agent-wsl-mounts"
-PRIVATE_DIR_MODE=700
 
 fail() {
     printf 'ERROR: %s\n' "$*" >&2
@@ -52,6 +51,7 @@ source "${CONFIG_FILE}"
 : "${SECOND_USERNAME:?SECOND_USERNAME не задан}"
 : "${GIT_NAME:?GIT_NAME не задан}"
 : "${GIT_EMAIL:?GIT_EMAIL не задан}"
+: "${SHARE_GROUP:?SHARE_GROUP не задан}"
 : "${APT_MIRROR:?APT_MIRROR не задан}"
 : "${TZ_VALUE:?TZ_VALUE не задан}"
 
@@ -65,6 +65,9 @@ AGENT_GROUP=''
 AGENT_UID=''
 AGENT_GID=''
 SECOND_USER_MISSING=0
+
+PRIVATE_DIR_MODE=700
+SHARED_DIR_MODE=770
 
 FORBIDDEN_GROUPS=(sudo wheel docker lxd libvirt disk shadow adm kvm)
 log() {
@@ -94,6 +97,8 @@ validate_identifiers() {
         die "недопустимое Linux-имя: ${MAIN_USERNAME}"
     [[ ${SECOND_USERNAME} =~ ^[a-z_][a-z0-9_-]*$ ]] ||
         die "недопустимое Linux-имя: ${SECOND_USERNAME}"
+    [[ ${SHARE_GROUP} =~ ^[a-z_][a-z0-9_-]*$ ]] ||
+        die "недопустимое имя группы: ${SHARE_GROUP}"
     [[ ${MAIN_USERNAME} != "${SECOND_USERNAME}" ]] ||
         die 'основной и агентский пользователи должны отличаться'
 }
@@ -241,10 +246,30 @@ assert_no_sudo_access() {
     fi
 }
 
+ensure_share_group() {
+    log "Настройка общей группы ${SHARE_GROUP}"
+    if [[ ${MODE} == apply ]]; then
+        getent group "${SHARE_GROUP}" >/dev/null 2>&1 ||
+            groupadd --system "${SHARE_GROUP}"
+        usermod --append --groups "${SHARE_GROUP}" "${MAIN_USERNAME}"
+        usermod --append --groups "${SHARE_GROUP}" "${SECOND_USERNAME}"
+    else
+        getent group "${SHARE_GROUP}" >/dev/null 2>&1 ||
+            die "группа не найдена: ${SHARE_GROUP}"
+        [[ " $(id --groups --name "${MAIN_USERNAME}") " == *" ${SHARE_GROUP} "* ]] ||
+            die "${MAIN_USERNAME} не состоит в ${SHARE_GROUP}"
+        if (( ! SECOND_USER_MISSING )); then
+            [[ " $(id --groups --name "${SECOND_USERNAME}") " == *" ${SHARE_GROUP} "* ]] ||
+                die "${SECOND_USERNAME} не состоит в ${SHARE_GROUP}"
+        fi
+    fi
+}
+
 resolve_agent_ids() {
-    AGENT_GROUP="$(id --group --name "${SECOND_USERNAME}")"
+    AGENT_GROUP="${SHARE_GROUP}"
     AGENT_UID="$(id --user "${SECOND_USERNAME}")"
-    AGENT_GID="$(id --group "${SECOND_USERNAME}")"
+    AGENT_GID="$(getent group "${SHARE_GROUP}" | cut -d: -f3)"
+    [[ ${AGENT_GID} =~ ^[0-9]+$ ]] || die "не удалось определить GID группы ${SHARE_GROUP}"
 }
 
 validate_mount_config() {
@@ -305,7 +330,7 @@ install_dir_below() {
         current="${current}/${part}"
         install --directory \
             --owner="${SECOND_USERNAME}" --group="${AGENT_GROUP}" \
-            --mode="${PRIVATE_DIR_MODE}" "${current}"
+            --mode="${SHARED_DIR_MODE}" "${current}"
     done
 }
 
@@ -423,7 +448,7 @@ ensure_dir_below() {
             .|..) printf 'Invalid path component in mount target: %s\n' "$path" >&2; return 1 ;;
         esac
         current="$current/$part"
-        install --directory --owner="$AGENT_USER" --group="$AGENT_GROUP" --mode=700 "$current"
+        install --directory --owner="$AGENT_USER" --group="$AGENT_GROUP" --mode=770 "$current"
     done
 }
 
@@ -448,10 +473,10 @@ mount_one() {
     ensure_dir_below "$target" || return 1
 
     mount -t drvfs "$win_source" "$target" \
-        -o "metadata,uid=${AGENT_UID},gid=${AGENT_GID},umask=077"
+        -o "metadata,uid=${AGENT_UID},gid=${AGENT_GID},umask=007"
 
     chown "${AGENT_UID}:${AGENT_GID}" "$target"
-    chmod 700 "$target"
+    chmod 770 "$target"
 }
 
 for index in "${!SOURCE_PATHS[@]}"; do
@@ -542,6 +567,7 @@ main() {
     validate_mount_config
     install_dependencies
     ensure_users
+    ensure_share_group
     if (( SECOND_USER_MISSING )); then
         printf 'WARNING: проверки, требующие пользователя %s, пропущены.\n' "${SECOND_USERNAME}"
         return
