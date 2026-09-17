@@ -15,8 +15,6 @@ source device.env
 MASTER="${AGENT_CONFIG_MASTER:-$HOME}"
 [[ ${MASTER} == "/home/${AGENT_USER}" ]] ||
   die "AGENT_CONFIG_MASTER должен указывать на локальный HOME агента: /home/${AGENT_USER}"
-#findmnt -nT "$MASTER/.agents" -o TARGET 2>/dev/null | grep -Fqx -- "$MASTER/.agents" ||
-#  die "$MASTER/.agents должен быть отдельным bind mount"
 
 AGENT_HOME="/home/$AGENT_USER"
 
@@ -24,18 +22,40 @@ render() {
   sed -e "s|@AGENT_HOME@|$AGENT_HOME|g" -e "s|@AGENT_DATA_ROOT@|$AGENT_DATA_ROOT|g" "$1"
 }
 
+# Приватные конфиги: рендерятся из шаблонов прямо в HOME агента.
 TEMPLATED=(
   "omp/agent/config.yml.tmpl .omp/agent/config.yml"
   "omp/agent/mcp.json.tmpl .omp/agent/mcp.json"
 )
 
-# Общие данные используются напрямую через bind mounts,
-# созданные agent-user-setup/first.sh.
-DIRS=(
+# Общие артефакты: копируются как есть. Остальное состояние .omp не затрагивается,
+# поэтому credentials, базы, сессии и логи остаются локальными для агента.
+SHARED=(
   "agents/AGENTS.md .agents/AGENTS.md"
   "agents/skills .agents/skills"
-  "omp .omp"
+  "omp/agent/models.yml .omp/agent/models.yml"
+  "omp/agent/RULES.md .omp/agent/RULES.md"
+  "omp/agent/managed-skills .omp/agent/managed-skills"
+  "omp/extensions/superpowers .omp/extensions/superpowers"
 )
+
+# Копирует дерево без шаблонов и без скрытых файлов (.git, .gitignore).
+copy_tree() {
+  local src="$1" dst="$2" item name
+  mkdir -p "$dst"
+  for item in "$src"/*; do
+    [ -e "$item" ] || continue
+    name="$(basename -- "$item")"
+    case "$name" in
+      *.tmpl) continue ;;
+    esac
+    if [ -d "$item" ]; then
+      copy_tree "$item" "$dst/$name"
+    else
+      cp -a -- "$item" "$dst/$name"
+    fi
+  done
+}
 
 push() {
   mkdir -p "$MASTER/.omp/agent" "$MASTER/.agents"
@@ -50,11 +70,11 @@ push() {
     echo "push  $dst (шаблон)"
   done
 
-  for pair in "${DIRS[@]}"; do
+  for pair in "${SHARED[@]}"; do
     read -r src dst <<<"$pair"
+    mkdir -p "$(dirname -- "$MASTER/$dst")"
     if [ -d "$src" ]; then
-      mkdir -p "$MASTER/$dst"
-      cp -a "$src/." "$MASTER/$dst/"
+      copy_tree "$src" "$MASTER/$dst"
     else
       install -m 644 "$src" "$MASTER/$dst"
     fi
@@ -64,11 +84,12 @@ push() {
 
 diff_run() {
   local pair src dst rc=0
-  for pair in "${DIRS[@]}"; do
+  for pair in "${SHARED[@]}"; do
     read -r src dst <<<"$pair"
     if [ ! -e "$MASTER/$dst" ]; then echo "MISSING $dst"; rc=1; continue; fi
     if [ -d "$src" ]; then
-      if ! diff -r -q --strip-trailing-cr --exclude=.git "$src" "$MASTER/$dst" 2>/dev/null; then
+      if ! diff -r -q --strip-trailing-cr --exclude=.* --exclude='*.tmpl' \
+        "$src" "$MASTER/$dst" 2>/dev/null; then
         echo "DIFF     $dst/"
         rc=1
       fi

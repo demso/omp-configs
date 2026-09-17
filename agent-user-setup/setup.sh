@@ -196,7 +196,7 @@ write_bashrc_if_changed
 bun install -g @oh-my-pi/pi-coding-agent
 
 # Рендерит приватные config.yml/mcp.json и обновляет общий каталог .agents.
-bash "$HOME/.agent-config/install.sh" push
+bash "$HOME/.agent-configs/install.sh" push
 
 
 # ---------- 9. Проверка ----------

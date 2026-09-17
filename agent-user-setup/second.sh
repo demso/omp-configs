@@ -19,46 +19,12 @@ CONFIG_FILE="/etc/agent-setup.conf"
 # shellcheck disable=SC1090
 source "${CONFIG_FILE}"
 
-: "${MAIN_USERNAME:?MAIN_USERNAME не задан}"
 : "${SECOND_USERNAME:?SECOND_USERNAME не задан}"
-: "${WINDOWS_USERNAME:?WINDOWS_USERNAME не задан}"
-
-declare -p AGENT_MOUNT_TARGETS >/dev/null 2>&1 || {
-    printf 'ERROR: AGENT_MOUNT_TARGETS должен быть Bash-массивом\n' >&2
-    exit 1
-}
 
 [[ $(id --user --name) == "${SECOND_USERNAME}" ]] || {
     printf 'ERROR: запустите second.sh от имени %s\n' "${SECOND_USERNAME}" >&2
     exit 1
 }
-
-
-check_environment() {
-    # Проверка текущих монтирований drvfs.
-    findmnt --type drvfs || true
-    ls -ld /mnt/c /mnt/d
-
-    # Проверка разделения прав между пользователями.
-    if ls /mnt/c >/dev/null 2>&1; then
-        echo "WARNING: ${SECOND_USERNAME} видит /mnt/c напрямую"
-    else
-        echo "Access denied as expected"
-    fi
-
-    test_file="$(mktemp /mnt/d/.agent-write-test.XXXXXX)"
-    trap 'rm -f -- "${test_file}"' EXIT
-    printf 'ok\n' >"${test_file}"
-    printf 'Write access confirmed\n'
-
-    # Bind-монтирования создаёт root-owned systemd-сервис из first.sh.
-    for target in "${AGENT_MOUNT_TARGETS[@]}"; do
-        mountpoint --quiet "${target}" ||
-            printf 'WARNING: точка ещё не смонтирована: %s\n' "${target}" >&2
-    done
-}
-
-#check_environment
 
 # Запуск пользовательского скрипта без root в выбранном режиме.
 if [[ ${MODE} == apply ]]; then
