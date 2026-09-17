@@ -3,14 +3,12 @@
 # Первоначальная настройка пользователя agent в WSL.
 #
 # 1. Установите общий конфиг до запуска:
-#      sudo install -o root -g root -m 644 \
-#          agent-setup.conf.example /etc/agent-setup.conf
+#      sudo install -o root -g root -m 644 agent-setup.conf.example /etc/agent-setup.conf
 # 2. При необходимости отредактируйте его:
 #      sudoedit /etc/agent-setup.conf
-# 3. Убедитесь, что диски Windows смонтированы в /mnt/c и /mnt/d.
-# 4. Запустите скрипт от root:
+# 3. Запустите скрипт от root:
 #      sudo ./first.sh
-# 5. Перезапустите WSL из PowerShell:
+# 4. Перезапустите WSL из PowerShell:
 #      wsl --shutdown
 #
 # Скрипт не изменяет права и содержимое каталогов на дисках Windows.
@@ -111,7 +109,7 @@ install_dependencies() {
         build-essential ca-certificates curl wget unzip
         git git-lfs python3 python3-dev python3-venv python3-pip
         python-is-python3 nodejs npm fd-find bat fzf ripgrep jq
-        golang-go postgresql-client libssl-dev zlib1g-dev libffi-dev vim tree tzdata
+        golang-go postgresql-client libssl-dev zlib1g-dev libffi-dev vim tree tzdata git-delta
     )
     APT_MIRROR="${APT_MIRROR%/}"
     if apt-cache show eza >/dev/null 2>&1; then
@@ -287,15 +285,8 @@ validate_mount_config() {
         source="${AGENT_MOUNT_SOURCES[index]}"
         target="${AGENT_MOUNT_TARGETS[index]}"
 
-        # Раздельные шаблоны: один case-паттерн со знаком | неотличим от
-        # конвейера для статических анализаторов.
-        case "${source}" in
-            /mnt/c/*) ;;
-            /mnt/d/*) ;;
-            *) die "source должен лежать на диске Windows (/mnt/c или /mnt/d): ${source}" ;;
-        esac
-        [[ -d ${source} ]] ||
-            die "source должен быть существующим каталогом: ${source}"
+        [[ ${source} =~ ^[A-Za-z]:\\.+$ ]] ||
+            die "source должен быть Windows-путём вида C:\\Users\\...: ${source}"
 
         case "${target}" in
             "${AGENT_HOME}/.agents"|"${AGENT_HOME}/.omp/"*|"${AGENT_HOME}/shared/"*) ;;
@@ -362,7 +353,6 @@ prepare_agent_home() {
     done
 }
 
-
 configure_git_for_user() {
     local username="$1" home
     home="$(getent passwd "${username}" | cut -d: -f6)"
@@ -377,6 +367,16 @@ configure_git_for_user() {
         git config --global core.sharedRepository world
     runuser --user "${username}" -- env HOME="${home}" \
         git config --global init.defaultBranch main
+    runuser --user "${username}" -- env HOME="${home}" \
+        git config --global core.pager delta
+    runuser --user "${username}" -- env HOME="${home}" \
+        git config --global interactive.diffFilter 'delta --color-only'
+    runuser --user "${username}" -- env HOME="${home}" \
+        git config --global delta.navigate true
+    runuser --user "${username}" -- env HOME="${home}" \
+        git config --global merge.conflictStyle zdiff3
+    runuser --user "${username}" -- env HOME="${home}" \
+        git config --global side-by-side true	
 }
 
 configure_git() {
@@ -385,14 +385,13 @@ configure_git() {
         printf 'INFO: check mode; Git-конфигурация не изменяется.\n'
         return
     fi
-    configure_git_for_user "${MAIN_USERNAME}"
     configure_git_for_user "${SECOND_USERNAME}"
 }
 
 
 install_mount_script() {
     log 'Установка root-скрипта монтирования'
-    local tmp path
+    local tmp
     tmp="$(mktemp)"
 
     # Шапка: значения, известные только инсталлятору, подставляем сразу.
@@ -453,18 +452,7 @@ ensure_dir_below() {
 }
 
 mount_one() {
-    local source="$1" target="$2" win_source
-
-    [[ -d "$source" ]] || {
-        printf 'Invalid mount source, expected a directory: %s\n' "$source" >&2
-        return 1
-    }
-
-    case "$source" in
-        /mnt/c/*) win_source="C:${source#/mnt/c}" ;;
-        /mnt/d/*) win_source="D:${source#/mnt/d}" ;;
-        *) printf 'Unsupported mount source: %s\n' "$source" >&2; return 1 ;;
-    esac
+    local source="$1" target="$2"
 
     if mountpoint --quiet "$target"; then
         return 0
@@ -472,8 +460,11 @@ mount_one() {
 
     ensure_dir_below "$target" || return 1
 
-    mount -t drvfs "$win_source" "$target" \
-        -o "metadata,uid=${AGENT_UID},gid=${AGENT_GID},umask=007"
+    mount -t drvfs "$source" "$target" \
+        -o "metadata,uid=${AGENT_UID},gid=${AGENT_GID},umask=007" || {
+        printf 'Failed to mount Windows directory %s at %s\n' "$source" "$target" >&2
+        return 1
+    }
 
     chown "${AGENT_UID}:${AGENT_GID}" "$target"
     chmod 770 "$target"
@@ -499,25 +490,13 @@ EOF
 
 install_systemd_unit() {
     log 'Установка systemd-сервиса монтирования'
-    local tmp source rest drive candidate
-    local -a candidates=() mount_roots=()
+    local tmp
     tmp="$(mktemp)"
-
-    # Корни дисков, которые сервис обязан дождаться до старта.
-    for source in "${AGENT_MOUNT_SOURCES[@]}"; do
-        rest="${source#/}"
-        drive="${rest#*/}"
-        candidates+=("/${rest%%/*}/${drive%%/*}")
-    done
-    while IFS= read -r candidate; do
-        mount_roots+=("${candidate}")
-    done < <(printf '%s\n' "${candidates[@]}" | sort --unique)
 
     {
         printf '[Unit]\n'
         printf 'Description=Mount shared Windows directories for %s\n' "${SECOND_USERNAME}"
         printf 'After=local-fs.target\n'
-        printf 'RequiresMountsFor=%s\n' "${mount_roots[*]}"
         printf '\n[Service]\n'
         printf 'Type=oneshot\n'
         printf 'ExecStart=%s\n' "${MOUNT_SCRIPT}"
@@ -546,7 +525,6 @@ install_systemd_unit() {
         printf 'INFO: systemd не запущен; сервис будет активирован после перезапуска WSL.\n'
     fi
 }
-
 
 write_checks() {
     log 'Проверка итоговых прав'

@@ -12,7 +12,7 @@
 # Основной Linux-пользователь.
 MAIN_USERNAME="koposov"
 
-# Имя профиля Windows в /mnt/c/Users/.
+# Имя профиля Windows, используется в шаблонах путей ниже.
 WINDOWS_USERNAME="koposov"
 
 # Пользователь, под которым запускаются агенты.
@@ -31,14 +31,14 @@ PYPI_MIRROR="https://mirror.yandex.ru/pypi/web/simple/"
 NPM_REGISTRY="https://registry.npmmirror.com"
 TZ_VALUE="Europe/Moscow"
 
-# Общие каталоги берутся из профиля Windows и монтируются как drvfs внутрь
+# Общие каталоги берутся из Windows и монтируются как drvfs внутрь
 # домашнего каталога агента. Приватные конфиги, credentials, базы, сессии и
 # логи внутри .omp остаются локальными для agent.
-# Монтируются только каталоги: отдельные файлы этой схемой не поддерживаются.
+# Источники задаются как Windows-пути; монтируются только каталоги.
 AGENT_MOUNT_SOURCES=(
-    "/mnt/c/Users/${WINDOWS_USERNAME}/.agents"
-    "/mnt/c/Users/${WINDOWS_USERNAME}/Downloads"
-    "/mnt/c/Users/${WINDOWS_USERNAME}/Documents/ShareX/Screenshots"
+    "C:\Users\${WINDOWS_USERNAME}\.agents"
+    "C:\Users\${WINDOWS_USERNAME}\Downloads"
+    "C:\Users\${WINDOWS_USERNAME}\Documents\ShareX\Screenshots"
 )
 
 # Соответствующие точки монтирования внутри /home/SECOND_USERNAME.
