@@ -19,6 +19,16 @@ NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE
 
 If you haven't run the verification command in this message, you cannot claim it passes.
 
+## Local Policy Overrides (this user's environment)
+
+- **No test-suite runs unless the user explicitly requested tests in this session.**
+  Verification defaults to the cheapest command proving the claim: build, typecheck,
+  lint, or a smoke-run of the changed path / reproduction of the original symptom.
+- **Claims about tests** ("tests pass", "suite is green") are allowed only when the
+  user asked for tests — then the Iron Law applies to the suite output in full.
+- **"Verified" never authorizes remote operations.** The user performs all pushes,
+  merges, rebases, and PR creation.
+
 ## The Gate Function
 
 ```

@@ -1,6 +1,6 @@
 ---
 name: "pr-review-expert"
-description: "Use when the user asks to review pull requests, analyze code changes, check for security issues in PRs, or assess code quality of diffs."
+description: "Use when the user points at an EXISTING external PR/MR (URL or number) and asks to review it, check for security issues, or assess its diff quality - blast radius, breaking changes, security scan. For changes the agent itself just wrote use requesting-code-review; for a standards+spec review since a fixed point use code-review; for explicitly hostile review use adversarial-reviewer."
 ---
 
 # PR Review Expert

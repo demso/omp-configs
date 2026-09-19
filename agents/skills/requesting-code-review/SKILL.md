@@ -1,6 +1,6 @@
 ---
 name: requesting-code-review
-description: Use when completing tasks, implementing major features, or before merging to verify work meets requirements
+description: Use when the AGENT has just authored changes (completed a task or major feature) and they need review before handoff - dispatch a reviewer subagent on the diff. For external PRs use pr-review-expert; for reviewing since a fixed point use code-review; for explicitly hostile review use adversarial-reviewer.
 ---
 
 # Requesting Code Review
@@ -14,7 +14,7 @@ Dispatch a code reviewer subagent to catch issues before they cascade. The revie
 **Mandatory:**
 - After each task in subagent-driven development
 - After completing major feature
-- Before merge to main
+- Before handoff for integration (the user performs the merge)
 
 **Optional but valuable:**
 - When stuck (fresh perspective)

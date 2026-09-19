@@ -14,11 +14,15 @@ Turn any Git repository into a prompt-ready text digest. GitIngest fetches, clea
 
 ### 1.1 CLI Installation (Recommended for Scripts & Automation)
 ```bash
-# Best practice: Use pipx for CLI tools (isolated environment)
+# Preferred: uv tool (fast, isolated, no sudo) — verified on Debian/Ubuntu Python 3.14
+uv tool install gitingest        # binary lands in ~/.local/bin/gitingest
+
+# Alternative: pipx for CLI tools (isolated environment)
 pipx install gitingest
 
-# Alternative: Use pip (may conflict with other packages)
-pip install gitingest
+# ⚠️ Plain `pip install gitingest` FAILS on PEP 668 systems
+# (Debian/Ubuntu with Python 3.12+): error "externally-managed-environment".
+# Do NOT use --break-system-packages. Use uv/pipx or a venv instead — see §1.4.
 
 # Verify installation
 gitingest --help
@@ -44,15 +48,33 @@ pip install gitingest[dev,server]
 
 ### 1.3 Installation Verification
 ```bash
-# Test CLI installation
-gitingest --version
+# NOTE: gitingest 0.3.x has NO --version flag ("Error: No such option").
+# Check the installed version via the installer instead:
+uv tool list | grep gitingest        # or: pipx list | grep gitingest
 
 # Test Python package
 python -c "from gitingest import ingest; print('GitIngest installed successfully')"
 
-# Quick functionality test
+# Quick functionality test (this is the real verification — exercises clone + digest):
 gitingest https://github.com/octocat/Hello-World -o test_output.txt
 ```
+
+### 1.4 Troubleshooting: `externally-managed-environment` (PEP 668)
+
+**Symptom:** `pip install gitingest` aborts with
+`error: externally-managed-environment` and a hint about `apt install python3-xyz`.
+
+**Cause:** Debian/Ubuntu (and derivatives like WSL Ubuntu) mark the system Python
+as externally managed since Python 3.12. Plain `pip` cannot write to system
+site-packages. This is a guardrail, not a gitingest bug.
+
+**Fixes, in order of preference:**
+1. `uv tool install gitingest` — isolated env per tool, no sudo, fast.
+2. `pipx install gitingest` (install pipx first: `sudo apt install pipx`).
+3. Dedicated venv (§1.2) — then call `<venv>/bin/gitingest` or symlink it into PATH.
+
+**Never** use `pip install --break-system-packages gitingest`: it can break
+apt-managed Python packages.
 
 ---
 ## 2. Quick-Start for AI Agents

@@ -1,6 +1,6 @@
 ---
 name: systematic-debugging
-description: Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes
+description: Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes - the default first response. If the cause resists initial hypotheses or it is a performance regression, escalate to diagnosing-bugs. For repairing a whole feature/module end-to-end, use focused-fix.
 ---
 
 # Systematic Debugging

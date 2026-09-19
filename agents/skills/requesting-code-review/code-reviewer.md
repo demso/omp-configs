@@ -63,11 +63,12 @@ Subagent (general-purpose):
     - Security concerns?
     - Integrates cleanly with surrounding code?
 
-    **Testing:**
+    **Testing (only if the diff adds or modifies tests):**
     - Tests verify real behavior, not mocks?
     - Edge cases covered?
     - Integration tests where they matter?
-    - All tests passing?
+    - Do NOT demand new tests and do NOT run the suite: test policy is
+      user-gated — tests are written and run only when the user asked.
 
     **Production readiness:**
     - Migration strategy if schema changed?
