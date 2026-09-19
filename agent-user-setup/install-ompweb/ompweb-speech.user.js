@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ompweb — Silero-озвучивание ответов
 // @namespace    local.ompweb
-// @version      2.0.0
+// @version      2.1.0
 // @description  Локальное озвучивание ответов через Silero TTS с выбором голоса и скорости.
 // @match        http://localhost:30177/*
 // @match        http://127.0.0.1:30177/*
@@ -36,8 +36,8 @@
   const RATES = [0.8, 1, 1.2, 1.35, 1.5];
 
   let currentCard = null;
-  let currentAudio = null;
-  let currentAudioUrl = null;
+  let audioContext = null;
+  let currentAudioSource = null;
   let currentRequest = null;
   let speakingGeneration = 0;
   let initialized = false;
@@ -229,15 +229,15 @@
   }
 
   function releaseAudio() {
-    if (currentAudio) {
-      currentAudio.pause();
-      currentAudio.src = "";
-      currentAudio = null;
+    if (!currentAudioSource) return;
+    currentAudioSource.onended = null;
+    try {
+      currentAudioSource.stop();
+    } catch (error) {
+      if (error.name !== "InvalidStateError") console.warn("[ompweb-speech] Не удалось остановить аудио", error);
     }
-    if (currentAudioUrl) {
-      URL.revokeObjectURL(currentAudioUrl);
-      currentAudioUrl = null;
-    }
+    currentAudioSource.disconnect();
+    currentAudioSource = null;
   }
 
   function requestAudio(text) {
@@ -252,7 +252,8 @@
         timeout: 60000,
         onload: (response) => {
           if (response.status >= 200 && response.status < 300) {
-            resolve(new Blob([response.response], { type: "audio/wav" }));
+            const bytes = new Uint8Array(response.response);
+            resolve(bytes.slice().buffer);
           } else {
             reject(new Error(`Silero вернул HTTP ${response.status}`));
           }
@@ -285,15 +286,21 @@
     try {
       for (const chunk of chunks) {
         if (generation !== speakingGeneration) return;
-        const blob = await requestAudio(chunk);
+        const wav = await requestAudio(chunk);
         if (generation !== speakingGeneration) return;
-        currentAudioUrl = URL.createObjectURL(blob);
-        currentAudio = new Audio(currentAudioUrl);
-        currentAudio.playbackRate = selectedRate();
-        await new Promise((resolve, reject) => {
-          currentAudio.onended = resolve;
-          currentAudio.onerror = () => reject(new Error("Браузер не смог воспроизвести WAV"));
-          currentAudio.play().catch(reject);
+
+        audioContext ??= new AudioContext();
+        if (audioContext.state === "suspended") await audioContext.resume();
+        const decoded = await audioContext.decodeAudioData(wav);
+        if (generation !== speakingGeneration) return;
+
+        currentAudioSource = audioContext.createBufferSource();
+        currentAudioSource.buffer = decoded;
+        currentAudioSource.playbackRate.value = selectedRate();
+        currentAudioSource.connect(audioContext.destination);
+        await new Promise((resolve) => {
+          currentAudioSource.onended = resolve;
+          currentAudioSource.start();
         });
         releaseAudio();
       }
