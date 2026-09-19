@@ -22,7 +22,7 @@ providers:
           max_latency_ms: 100000
     modelOverrides:
       kimi-k3:
-        supportsTools: true
+        supportsTools: false
     models:
       - id: glm-5.3-flash
         name: GLM-5.3-Flash (surplus)
