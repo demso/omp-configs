@@ -13,8 +13,6 @@ source device.env
 : "${AGENT_DATA_ROOT:?задай AGENT_DATA_ROOT в device.env}"
 
 MASTER="${AGENT_CONFIG_MASTER:-$HOME}"
-[[ ${MASTER} == "/home/${AGENT_USER}" ]] ||
-  die "AGENT_CONFIG_MASTER должен указывать на локальный HOME агента: /home/${AGENT_USER}"
 
 AGENT_HOME="/home/$AGENT_USER"
 

@@ -5,15 +5,6 @@
       "type": "http",
       "url": "https://mcp.grep.app"
     },
-    "mcp-server-git": {
-      "type": "stdio",
-      "command": "@AGENT_HOME@/.local/bin/uvx",
-      "args": [
-        "--default-index", "https://pypi.org/simple",
-        "--from", "git+https://github.com/modelcontextprotocol/servers.git#subdirectory=src/git",
-        "mcp-server-git"
-      ]
-    },
     "doc-md-indexer": {
       "type": "stdio",
       "command": "@AGENT_HOME@/.venvs/doc-md-indexer/bin/python",
