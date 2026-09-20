@@ -294,3 +294,246 @@ mkdir -p ~/.omp/agent
 - [bigpowers v2.88.7 release](https://github.com/danielvm-git/bigpowers/releases/tag/v2.88.7)
 - [OMP plugin documentation](https://aieguu.github.io/omp-docs-cn/guide/plugins)
 - [OMP MCP configuration](https://github.com/can1357/oh-my-pi/blob/main/docs/mcp-config.md)
+
+**Установка** **bigpowers v2.88.7** в отдельный проект OMP
+
+ OMP поддерживает project scope только для marketplace-плагинов. Для Git-источника параметр --scope project игнорируется. Поэтому нужен небольшой локальный marketplace внутри проекта.
+
+ **### 1. Перейти в корень проекта**
+
+ ```bash
+cd /path/to/project
+ ```
+
+ Проверьте OMP:
+
+ ```bash
+omp --version
+omp plugin --help
+ ```
+
+ **### 2. Создать локальный marketplace**
+
+ ```bash
+mkdir -p .omp/marketplace/.omp-plugin
+ ```
+
+ Создайте файл:
+
+ ```text
+.omp/marketplace/.omp-plugin/marketplace.json
+ ```
+
+ Содержимое:
+
+ ```json
+{
+  "name": "project-local",
+  "owner": {
+    "name": "Local project"
+  },
+  "metadata": {
+    "description": "Project-local OMP plugins"
+  },
+  "plugins": [
+    {
+      "name": "bigpowers",
+      "description": "Agent skills and workflow guards for software development",
+      "version": "2.88.7",
+      "source": {
+        "source": "github",
+        "repo": "danielvm-git/bigpowers",
+        "ref": "v2.88.7"
+      },
+      "author": {
+        "name": "Daniel"
+      },
+      "homepage": "https://github.com/danielvm-git/bigpowers",
+      "repository": "https://github.com/danielvm-git/bigpowers",
+      "license": "MIT"
+    }
+  ]
+}
+ ```
+
+ Имя marketplace можно изменить. Далее в командах используйте выбранное имя вместо project-local.
+
+ **### 3. Зарегистрировать marketplace**
+
+ ```bash
+omp plugin marketplace add ./.omp/marketplace
+ ```
+
+ Проверьте регистрацию:
+
+ ```bash
+omp plugin marketplace list
+omp plugin discover project-local
+ ```
+
+ Ожидаемый результат:
+
+ ```text
+Available Plugins (project-local):
+
+  bigpowers@2.88.7
+ ```
+
+ Регистрация marketplace хранится в пользовательской конфигурации OMP. Сам plugin при следующем шаге будет установлен только для текущего проекта.
+
+ **### 4. Установить plugin в project scope**
+
+ ```bash
+omp plugin install \
+  --scope project \
+  bigpowers@project-local
+ ```
+
+ Ожидаемый результат:
+
+ ```text
+Installed bigpowers from project-local (2.88.7)
+ ```
+
+ OMP создаст проектный registry:
+
+ ```text
+.omp/plugins/installed_plugins.json
+ ```
+
+ Код plugin будет находиться в общем кэше OMP, но OMP загрузит эту установку только в данном проекте.
+
+ **### 5. Проверить установку**
+
+ ```bash
+omp plugin list --json
+omp plugin doctor
+ ```
+
+ В списке должна быть запись:
+
+ ```json
+{
+  "id": "bigpowers@project-local",
+  "scope": "project"
+}
+ ```
+
+ Важно проверить именно:
+
+ ```text
+"scope": "project"
+ ```
+
+ У bigpowers не должно быть отдельной записи в секции npm.
+
+ **### 6. Перезапустить OMP**
+
+ Для полной загрузки skills можно выполнить:
+
+ ```text
+/reload-plugins
+ ```
+
+ Но bigpowers также содержит extension и hooks. Поэтому после первой установки рекомендуется полностью завершить и снова запустить OMP из корня проекта.
+
+ После перезапуска проверьте:
+
+ \- доступен skill survey-context;
+ \- доступен skill using-bigpowers;
+ \- доступен инструмент bigpowers_skill;
+ \- i-have-adhd и другие пользовательские plugins продолжают загружаться.
+
+ **Инициализация workflow-файлов**
+
+ Сама установка plugin не создаёт scripts/ и specs/ в проекте.
+
+ Если нужны workflow, которые обращаются к этим каталогам, выполните из корня проекта:
+
+ ```bash
+node \
+  ~/.omp/plugins/cache/plugins/project-local___bigpowers___2.88.7/bin/bigpowers.js \
+  init
+ ```
+
+ Команда создаёт:
+
+ ```text
+scripts/
+specs/bugs/
+specs/verifications/
+ ```
+
+ Она не заменяет существующий пользовательский каталог scripts/. Если такой каталог уже существует, команда остановится с ошибкой.
+
+ Этот шаг не нужен только для загрузки skills, prompts и extension.
+
+ **Обновление**
+
+ Измените version и ref в marketplace-файле, например:
+
+ ```json
+"version": "2.88.8",
+"ref": "v2.88.8"
+ ```
+
+ Затем выполните:
+
+ ```bash
+omp plugin marketplace update project-local
+omp plugin upgrade \
+  --scope project \
+  bigpowers@project-local
+ ```
+
+ После обновления:
+
+ ```bash
+omp plugin list
+omp plugin doctor
+ ```
+
+ Затем перезапустите OMP.
+
+ **Удаление**
+
+ ```bash
+omp plugin uninstall \
+  --scope project \
+  bigpowers@project-local
+ ```
+
+ После удаления перезапустите OMP.
+
+ Если marketplace больше не нужен:
+
+ ```bash
+omp plugin marketplace remove project-local
+ ```
+
+ Удаление marketplace само по себе не удаляет установленный plugin. Сначала выполните plugin uninstall.
+
+ **Неправильный способ**
+
+ Не используйте:
+
+ ```bash
+omp plugin install \
+  'github:danielvm-git/bigpowers#v2.88.7' \
+  --scope project
+ ```
+
+ OMP выведет предупреждение и установит Git-plugin в пользовательский scope:
+
+ ```text
+Warning: --scope is only supported for marketplace installs
+ ```
+
+ Также не используйте:
+
+ ```bash
+npm install -g bigpowers
+bigpowers setup
+ ```
+
+ Эти команды создадут отдельную глобальную установку вне project-scoped plugin registry.
