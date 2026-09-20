@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bigpowers — карманный справочник</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+  <p class="eyebrow">Справочник · Oh My Pi</p>
+  <h1>Bigpowers: карманная карта</h1>
+  <p class="lead">Не список магических команд, а набор узких процедур, которые превращают намерение в проверяемое изменение.</p>
+
+  <h2 id="model">Ментальная модель</h2>
+  <div class="grid">
+    <article class="card"><p class="card-title">Skill</p><p>Инструкция для одного вида работы: исследовать, ограничить scope, спланировать, проверить или отревьюить. Это не «агент с характером» и не команда, которую нужно применять всегда.</p></article>
+    <article class="card"><p class="card-title">Specs</p><p>Операционная память проекта. Решения, план, состояние и доказательства лежат в <code>specs/</code>, поэтому следующий агент не должен восстанавливать их из чата.</p></article>
+    <article class="card"><p class="card-title">Gate</p><p>Условие, которое запрещает двигаться дальше без наблюдаемого факта: scope ограничен, baseline зелёный, UAT пройден, аудит не нашёл проблем.</p></article>
+    <article class="card"><p class="card-title">Evidence</p><p>Сохранённый результат запускаемой проверки или UAT. «Код выглядит верно» — не evidence.</p></article>
+  </div>
+
+  <h2 id="artifacts">Минимальный cockpit</h2>
+  <table>
+    <thead><tr><th>Артефакт</th><th>Вопрос, на который отвечает</th></tr></thead>
+    <tbody>
+      <tr><td><code>specs/state.yaml</code></td><td>Где мы сейчас? Какой flow, epic, story и следующий skill?</td></tr>
+      <tr><td><code>specs/product/SCOPE_LATEST.yaml</code></td><td>Что именно даёт ценность и что сознательно исключено?</td></tr>
+      <tr><td><code>specs/release-plan.yaml</code></td><td>Какие epics существуют и в каком приоритете?</td></tr>
+      <tr><td><code>specs/epics/eNN-slug/</code></td><td>Какие vertical stories надо сделать, каковы их требования и runnable <code>verify:</code>?</td></tr>
+      <tr><td><code>specs/execution-status.yaml</code></td><td>Какие stories pending, active или done?</td></tr>
+      <tr><td><code>specs/verifications/</code></td><td>Какие доказательства подтверждают завершение story?</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="routing">Быстрый выбор первого skill</h2>
+  <table>
+    <thead><tr><th>Состояние</th><th>Начать с</th><th>Почему</th></tr></thead>
+    <tbody>
+      <tr><td>Новый или незнакомый проект</td><td><code>seed-conventions</code></td><td>Фиксирует правила агентов и создаёт структуру <code>specs/</code>.</td></tr>
+      <tr><td>Существующий проект, новый запрос</td><td><code>survey-context</code></td><td>Читает фактический state и рекомендует следующий шаг.</td></tr>
+      <tr><td>Идея расплывчата</td><td><code>elaborate-spec</code></td><td>Сначала проясняет проблему; планировать неоднозначность нельзя.</td></tr>
+      <tr><td>Новая инициатива с ясной целью</td><td><code>scope-work</code></td><td>Создаёт границы до декомпозиции и реализации.</td></tr>
+      <tr><td>Подтверждённый дефект</td><td><code>investigate-bug</code></td><td>Ищет причину и формулирует план исправления, не маскируя симптом.</td></tr>
+      <tr><td>Код уже готов</td><td><code>verify-work</code></td><td>Проверяет продуктовое поведение и сохраняет evidence.</td></tr>
+      <tr><td>Нужна независимая оценка diff</td><td><code>audit-code</code> → <code>request-review</code></td><td>Сначала self-audit, затем свежий рецензент.</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="rules">Три правила против процессного карго-культа</h2>
+  <ol>
+    <li><strong>Начинайте с состояния, а не с любимого skill.</strong> Для существующей работы это обычно <code>survey-context</code>.</li>
+    <li><strong>Запускайте skill только когда его входы существуют.</strong> Например, <code>slice-tasks</code> после scope, <code>plan-work</code> после slices.</li>
+    <li><strong>Оптимизируйте доказательства, а не количество артефактов.</strong> Лёгкий P3 change не должен получать P0-церемонию, но ни один рискованный change не должен завершаться без UAT/evidence.</li>
+  </ol>
+  <p class="small">Основные источники: локальные инструкции <a href="skill://using-bigpowers">using-bigpowers</a>, <a href="skill://orchestrate-project">orchestrate-project</a>, <a href="skill://verify-work">verify-work</a>.</p>
+</body>
+</html>

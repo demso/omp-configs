@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bigpowers в Oh My Pi — практический гайд</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+  <p class="eyebrow">Гайд 0001 · Oh My Pi</p>
+  <h1>Bigpowers без карго-культа</h1>
+  <p class="lead">Bigpowers — это операционная система работы AI-разработчика: набор узких skills, проектных артефактов и quality gates. Его цель — не заставить агента написать больше кода, а сделать результат воспроизводимым, проверяемым и пригодным для передачи следующему агенту.</p>
+
+  <nav>
+    <a href="#idea">1. Идея</a>
+    <a href="#lifecycle">2. Lifecycle</a>
+    <a href="#scenarios">3. Сценарии</a>
+    <a href="#quality">4. Качество</a>
+    <a href="#practice">5. Практика</a>
+    <a href="../reference/bigpowers-workflow.html">Справочник</a>
+  </nav>
+
+  <h2 id="idea">1. Что это и зачем</h2>
+  <p>Обычная работа с coding agent часто выглядит так: пользователь дал длинное сообщение, агент нашёл несколько файлов, внёс правку и сказал «готово». Такой процесс оптимизирует скорость ответа, но не качество. Он теряет контекст, не фиксирует границы задачи и смешивает план, реализацию и проверку.</p>
+  <p>Bigpowers разделяет эти виды работы. Каждый skill отвечает за одну функцию, а состояние переносится не в память чата, а в файлы проекта. Поэтому качество становится свойством процесса, а не удачей конкретного запуска модели.</p>
+  <aside class="good"><strong>Главная формула:</strong> намерение → ограниченный scope → вертикальный план → изолированная реализация → проверка поведения → независимый review → интеграция.</aside>
+
+  <div class="grid">
+    <article class="card"><p class="card-title">Не является</p><p>Автономным менеджером, который всегда должен пройти все 80 skills; заменой инженерного мышления; гарантией правильности без запуска проверок.</p></article>
+    <article class="card"><p class="card-title">Является</p><p>Каталогом процедур с входами, выходами и handoff. Вы выбираете процедуру по состоянию работы, а не по названию, которое лучше запомнилось.</p></article>
+  </div>
+
+  <h2 id="lifecycle">2. Карта полного жизненного цикла</h2>
+  <div class="flow"><span>DISCOVER</span><b>→</b><span>DESIGN</span><b>→</b><span>PLAN</span><b>→</b><span>BUILD</span><b>→</b><span>VERIFY</span><b>→</b><span>RELEASE</span></div>
+  <table>
+    <thead><tr><th>Фаза</th><th>Вопрос</th><th>Типовые skills</th><th>Результат</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Discover</strong></td><td>Что происходит и какую проблему решаем?</td><td><code>survey-context</code>, <code>research-first</code>, <code>elaborate-spec</code></td><td>Понятый контекст, подтверждённая потребность, источники.</td></tr>
+      <tr><td><strong>Design</strong></td><td>Какую модель и терминологию считаем правильными?</td><td><code>model-domain</code>, <code>define-language</code>, <code>design-interface</code>, <code>deepen-architecture</code></td><td>Язык домена, решения и архитектурные trade-offs.</td></tr>
+      <tr><td><strong>Plan</strong></td><td>Что именно войдёт в результат и как поймём, что готово?</td><td><code>scope-work</code> → <code>slice-tasks</code> → <code>plan-work</code></td><td>Границы, vertical stories, задачи с runnable <code>verify:</code>.</td></tr>
+      <tr><td><strong>Build</strong></td><td>Как безопасно изменить код?</td><td><code>kickoff-branch</code>, <code>develop-tdd</code>, <code>build-epic</code></td><td>Изолированный diff и обновлённые story-артефакты.</td></tr>
+      <tr><td><strong>Verify</strong></td><td>Работает ли обещанное для пользователя?</td><td><code>run-evals</code>, <code>verify-work</code>, <code>security-review</code></td><td>Smoke, механические gates, UAT и evidence.</td></tr>
+      <tr><td><strong>Release</strong></td><td>Можно ли передать изменение дальше?</td><td><code>audit-code</code>, <code>request-review</code>, <code>commit-message</code>, <code>release-branch</code></td><td>Пройденный review, локальный commit/PR handoff.</td></tr>
+    </tbody>
+  </table>
+  <p class="small">Это карта, а не обязательный ритуал каждого изменения. Маленький исправляющий change не должен проходить полную discovery-фазу; крупная фича — должна иметь соответствующую глубину.</p>
+
+  <h2 id="state">3. Как читать проект в Oh My Pi</h2>
+  <p>Первый вопрос после входа в проект: <em>какое состояние уже зафиксировано?</em> Не начинайте с редактирования файла и не выбирайте skill по памяти.</p>
+  <pre><code>specs/state.yaml                  # текущий flow, epic, handoff
+specs/product/SCOPE_LATEST.yaml   # границы инициативы
+specs/release-plan.yaml            # порядок epics
+specs/epics/eNN-slug/              # stories и tasks
+specs/execution-status.yaml        # фактический статус выполнения
+specs/verifications/               # доказательства проверки</code></pre>
+  <p>Для этого существует <code>survey-context</code>. Он читает state, specs, conventions и VCS, затем сообщает фазу, blockers и следующий skill. В нормальном рабочем цикле это точка входа для существующего проекта.</p>
+  <aside class="warn"><strong>Красный флаг:</strong> если <code>state.yaml</code> говорит одно, а код или VCS — другое, не «чините» state на глаз. Сначала разберитесь, какой источник устарел, иначе следующий агент продолжит неверный маршрут.</aside>
+
+  <h2 id="planning">4. Planning spine: три разных действия</h2>
+  <p>Самая важная часть bigpowers — не запомнить три названия, а не смешивать их смысл.</p>
+  <ol>
+    <li><strong><code>scope-work</code> — границы.</strong> Формулирует value, in-scope, out-of-scope, ограничения и success criteria. Здесь нельзя прятать архитектуру: «храним в PostgreSQL» — решение, а не scope.</li>
+    <li><strong><code>slice-tasks</code> — вертикальные stories.</strong> Делит scope на самостоятельные пользовательские срезы. «Добавить все модели» — горизонтальный слой; «пользователь создаёт заказ и видит его» — вертикальный срез.</li>
+    <li><strong><code>plan-work</code> — исполнимые задачи.</strong> Уточняет каждый story до шагов <code>что сделать → verify: runnable command</code>. Если критерий нельзя проверить командой или описанным UAT, история ещё не спланирована.</li>
+  </ol>
+  <p class="small">Если scope допускает две разные трактовки, сначала нужен пользовательский выбор. Нельзя компенсировать неоднозначность более подробным кодовым планом.</p>
+
+  <h2 id="scenarios">5. Правильные сценарии использования</h2>
+  <h3>Сценарий A — новая существенная фича</h3>
+  <div class="flow"><span><code>survey-context</code></span><b>→</b><span><code>elaborate-spec</code></span><b>→</b><span><code>scope-work</code></span><b>→</b><span><code>slice-tasks</code></span><b>→</b><span><code>plan-work</code></span><b>→</b><span><code>build-epic</code></span></div>
+  <ol>
+    <li>Проверьте, есть ли уже vision, scope и release plan.</li>
+    <li>Уточните пользовательскую ценность и исключения.</li>
+    <li>Нарежьте первый tracer-bullet: минимальный путь через все слои.</li>
+    <li>Для каждого task запишите риск и запускаемую проверку.</li>
+    <li>Реализуйте на feature branch, затем пройдите verify, audit и release handoff.</li>
+  </ol>
+
+  <h3>Сценарий B — точечный bug fix</h3>
+  <div class="flow"><span><code>survey-context</code></span><b>→</b><span><code>investigate-bug</code></span><b>→</b><span><code>diagnose-root</code></span><b>→</b><span><code>develop-tdd</code></span><b>→</b><span><code>validate-fix</code></span></div>
+  <p>Не начинайте с «попробую заменить эту строку». Сначала нужна воспроизводимость и гипотеза о причине. <code>validate-fix</code> должен подтвердить исходный failure, полный набор механических gates и отсутствие рецидива. Если дефект затрагивает несколько модулей, добавьте impact analysis.</p>
+
+  <h3>Сценарий C — уже написанный код</h3>
+  <div class="flow"><span><code>verify-work</code></span><b>→</b><span><code>audit-code</code></span><b>→</b><span><code>request-review</code></span></div>
+  <p>Это не повод пересоздавать план с нуля. Проверьте обещанное поведение, запишите gaps, затем проведите self-audit и независимый review. Если UAT не проходит, возвращайтесь к реализации, а не снижайте критерий.</p>
+
+  <h3>Сценарий D — низкорисковый change</h3>
+  <p>Для простой локальной правки используйте короткий маршрут: <code>survey-context</code> → правка на изолированной ветке → профильная smoke/typecheck/lint проверка → <code>commit-message</code>. «Fast-track» уменьшает церемонию, но не отменяет проверку и не разрешает работать прямо на <code>main</code>.</p>
+
+  <h2 id="quality">6. Как bigpowers стабилизирует качество</h2>
+  <div class="grid">
+    <article class="card"><p class="card-title">1 · Контекст</p><p>State и specs уменьшают потерю решений между сессиями и агентами.</p></article>
+    <article class="card"><p class="card-title">2 · Границы</p><p>Out-of-scope и delta-теги защищают от незаметного расширения задачи.</p></article>
+    <article class="card"><p class="card-title">3 · Дробление</p><p>Vertical slices обнаруживают интеграционные ошибки раньше горизонтальных слоёв.</p></article>
+    <article class="card"><p class="card-title">4 · Проверка</p><p>Runnable verify-команды превращают субъективное «готово» в наблюдаемое состояние.</p></article>
+    <article class="card"><p class="card-title">5 · Независимость</p><p>Свежий reviewer снижает риск, что автор не заметил собственный дефект.</p></article>
+    <article class="card"><p class="card-title">6 · Трассировка</p><p>Story, code, tests и evidence можно связать и найти тёмные требования.</p></article>
+  </div>
+
+  <h3>Risk-scaled gates</h3>
+  <table>
+    <thead><tr><th>Риск</th><th>Разумная глубина</th><th>Нельзя потерять</th></tr></thead>
+    <tbody>
+      <tr><td>P3</td><td>Typecheck/lint или профильная проверка.</td><td>Доказательство, что изменённый путь не сломан.</td></tr>
+      <tr><td>P2</td><td>Smoke, typecheck, lint; без полной security/UAT церемонии.</td><td>Реальный запуск изменённой поверхности.</td></tr>
+      <tr><td>P1</td><td>Build, typecheck, lint, tests по проектным правилам, ручной UAT.</td><td>Terminal verdict и сохранённое verification evidence.</td></tr>
+      <tr><td>P0</td><td>Полный verify, security review, blind spots и NFR evidence.</td><td>Явный go/no-go по безопасности, производительности, надёжности и эксплуатации.</td></tr>
+    </tbody>
+  </table>
+  <aside class="danger"><strong>Нельзя подменять gates текстом.</strong> Терминальный verdict — это один contiguous run команды с exit code. UAT — шаги пользователя и expected/actual. «Агент проверил» без команды, результата или evidence не является доказательством.</aside>
+
+  <h2 id="anti">7. Неправильные сценарии</h2>
+  <ul>
+    <li><strong>Вызвать orchestrate для каждой мелочи.</strong> Orchestrate предназначен для ясного multi-phase workflow. Для одного локального бага он создаёт шум.</li>
+    <li><strong>Начать с <code>plan-work</code> без scope.</strong> Детализация не устраняет неясную цель; она только делает ошибочную трактовку дороже.</li>
+    <li><strong>Сделать «сначала все модели, потом API, потом UI».</strong> Это задерживает интеграционный сигнал. Режьте вертикально.</li>
+    <li><strong>Запустить несколько агентов на один и тот же файл без контракта.</strong> Это не параллелизм, а конфликт. Параллельте только независимые ownership-срезы.</li>
+    <li><strong>Считать зелёный тест доказательством продукта.</strong> Тестовая команда — один gate; она не заменяет ручную проверку пользовательского обещания.</li>
+    <li><strong>Исправить state так, чтобы gate стал зелёным.</strong> State описывает реальность; он не должен скрывать незавершённую работу.</li>
+  </ul>
+
+  <h2 id="practice">8. Практический алгоритм для Oh My Pi</h2>
+  <ol>
+    <li><strong>Назовите тип работы:</strong> новая фича, bug, refactor, исследование или release.</li>
+    <li><strong>Запустите <code>survey-context</code>:</strong> прочитайте текущий handoff и blockers.</li>
+    <li><strong>Выберите глубину:</strong> полный lifecycle для существенного риска, fast-track для локального низкорискового change.</li>
+    <li><strong>Зафиксируйте обещание:</strong> кто получает какую наблюдаемую ценность.</li>
+    <li><strong>Зафиксируйте границы:</strong> in-scope, out-of-scope, success criteria.</li>
+    <li><strong>Нарежьте вертикально:</strong> каждая story должна давать демонстрируемую ценность.</li>
+    <li><strong>Сделайте verify runnable:</strong> не «проверить вручную», а конкретная команда или оформленный UAT-script.</li>
+    <li><strong>Изолируйте код:</strong> feature branch/worktree; не работайте прямо на защищённой ветке.</li>
+    <li><strong>Проверяйте обещание, а не только diff:</strong> smoke → механические gates → UAT → gaps loop.</li>
+    <li><strong>Оставьте handoff:</strong> state, status и evidence должны позволить продолжить работу без устного контекста.</li>
+  </ol>
+
+  <h2 id="decision">9. Шпаргалка решения</h2>
+  <details><summary>Я не знаю, с чего начать</summary><p><code>survey-context</code>. Он предназначен именно для чтения состояния и рекомендации следующего шага.</p></details>
+  <details><summary>Я знаю, что хочу, но не знаю границ</summary><p><code>elaborate-spec</code>, затем <code>scope-work</code>.</p></details>
+  <details><summary>Границы есть, но много работы</summary><p><code>slice-tasks</code>, затем <code>plan-work</code>. Проверяйте, что stories вертикальны и каждая task имеет verify.</p></details>
+  <details><summary>Код готов, но страшно сказать «done»</summary><p><code>verify-work</code> → <code>audit-code</code> → независимый review.</p></details>
+  <details><summary>Что-то сломалось</summary><p><code>investigate-bug</code>; не маскируйте симптом случайным fallback.</p></details>
+
+  <h2 id="exercise">10. Упражнение на реальном Oh My Pi</h2>
+  <p>Возьмите следующую задачу и ответьте письменно до запуска агента:</p>
+  <ol>
+    <li>Какой тип задачи и почему?</li>
+    <li>Какой риск P0–P3 и что это меняет в gates?</li>
+    <li>Что является user-observable success criterion?</li>
+    <li>Какой первый skill и какой следующий handoff?</li>
+    <li>Какой минимальный vertical slice даст ранний интеграционный сигнал?</li>
+    <li>Какая команда или UAT-шаг докажет каждый task?</li>
+  </ol>
+  <p>Если на любой вопрос нет точного ответа, задача ещё находится в discovery/design, а не в build.</p>
+
+  <h2 id="sources">Источники и следующий шаг</h2>
+  <p>Основные источники этого гайда — локальные инструкции Oh My Pi: <a href="skill://using-bigpowers">using-bigpowers</a>, <a href="skill://orchestrate-project">orchestrate-project</a>, <a href="skill://survey-context">survey-context</a>, <a href="skill://plan-work">plan-work</a>, <a href="skill://build-epic">build-epic</a> и <a href="skill://verify-work">verify-work</a>. Для истории и исходного проекта: <a href="https://github.com/danielvm-git/bigpowers">репозиторий bigpowers</a>.</p>
+  <aside>Это стартовая карта, не экзамен. Возьмите конкретную задачу из Oh My Pi, примените алгоритм и задайте мне вопросы по месту — особенно если state, scope и фактическое поведение противоречат друг другу.</aside>
+  <p class="small"><a href="../reference/bigpowers-workflow.html">Открыть карманный справочник →</a></p>
+</body>
+</html>
