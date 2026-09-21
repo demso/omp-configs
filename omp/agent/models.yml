@@ -21,6 +21,15 @@ providers:
           price_tolerance_pct: 1
           max_latency_ms: 100000
     models:
+      - id: jev-1.13
+        name: JEV 1.13 (surplus)
+        compat:
+          extraBody:
+            min_discount_pct: 40
+            si_route:
+              objective: latency
+              price_tolerance_pct: 15
+    
       - id: glm-5.3-flash
         name: GLM-5.3-Flash (surplus)
         reasoning: true
@@ -71,6 +80,18 @@ providers:
             min_discount_pct: 70
             si_route:
               objective: latency
+              price_tolerance_pct: 10
+              
+      - id: glm-5.3
+        name: GLM 5.3 (surplus)
+        reasoning: true
+        input: [text, image]
+        contextWindow: 1050000
+        compat:
+          extraBody:
+            min_discount_pct: 90
+            si_route:
+              objective: price
               price_tolerance_pct: 10
                
       - id: gpt-5.6-terra
