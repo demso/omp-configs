@@ -77,6 +77,7 @@ providers:
         maxTokens: 128000
         compat:
           extraBody:
+            providers_blocked: [ inferhub ]
             min_discount_pct: 70
             si_route:
               objective: latency
@@ -85,7 +86,7 @@ providers:
       - id: glm-5.3
         name: GLM 5.3 (surplus)
         reasoning: true
-        input: [text, image]
+        input: [text]
         contextWindow: 1050000
         compat:
           extraBody:
