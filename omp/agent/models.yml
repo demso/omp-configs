@@ -10,15 +10,15 @@ providers:
         name: GPT 5.6 Luna
   surplus:
     baseUrl: https://api.surplusintelligence.ai/v1
-    api: openai-completions
+    api: openai-responses
     apiKey: SURPLUS_KEY
     headers:
       X-Min-Discount: '40'
     compat:
       extraBody:
         si_route:
-          objective: latency
-          price_tolerance_pct: 1
+          stream: true
+          objective: price
           max_latency_ms: 100000
     models:
       - id: jev-1.13
@@ -29,16 +29,16 @@ providers:
             si_route:
               objective: latency
               price_tolerance_pct: 15
-    
+
       - id: glm-5.3-flash
         name: GLM-5.3-Flash (surplus)
         reasoning: true
-        input: [text, image]
+        input: [ text, image ]
         contextWindow: 1048576
         maxTokens: 131072
         compat:
           extraBody:
-            providers_blocked: [inferhub]
+            providers_blocked: [ inferhub ]
             min_discount_pct: 60
             si_route:
               objective: price
@@ -46,7 +46,7 @@ providers:
       - id: deepseek-v4.1-flash
         name: DeepSeek V4.1 Flash (surplus)
         reasoning: true
-        input: [text, image]
+        input: [ text, image ]
         contextWindow: 1048576
         maxTokens: 384000
         compat:
@@ -55,49 +55,50 @@ providers:
             si_route:
               objective: latency
               price_tolerance_pct: 15
-        
+
       - id: kimi-k2.7-code
         name: Kimi K2.7 Code (surplus)
         reasoning: true
-        input: [text]
+        input: [ text ]
         contextWindow: 262144
         maxTokens: 262144
         compat:
           extraBody:
-            providers_blocked: [inferhub]
+            providers_blocked: [ inferhub ]
             min_discount_pct: 90
             si_route:
               objective: price
-        
+
       - id: gpt-5.6-luna
         name: GPT-5.6 Luna (surplus)
         reasoning: true
-        input: [text, image]
+        input: [ text, image ]
         contextWindow: 1050000
         maxTokens: 128000
         compat:
           extraBody:
             providers_blocked: [ inferhub ]
-            min_discount_pct: 92
+            min_discount_pct: 70
             si_route:
-              objective: price
-              
+              objective: latency
+              price_tolerance_pct: 10
+
       - id: glm-5.3
         name: GLM 5.3 (surplus)
         reasoning: true
-        input: [text]
+        input: [ text ]
         contextWindow: 1050000
         compat:
           extraBody:
-            providers_blocked: [inferhub]
+            providers_blocked: [ inferhub ]
             min_discount_pct: 88
             si_route:
               objective: price
-               
+
       - id: gpt-5.6-terra
         name: GPT-5.6 Terra (surplus)
         reasoning: true
-        input: [text, image]
+        input: [ text, image ]
         contextWindow: 1050000
         maxTokens: 128000
         compat:
@@ -105,11 +106,11 @@ providers:
             min_discount_pct: 90
             si_route:
               objective: price
-              
+
       - id: kimi-k3
         name: Kimi K3 (surplus)
         reasoning: true
-        input: [text, image]
+        input: [ text, image ]
         contextWindow: 1050000
         maxTokens: 262144
         compat:
@@ -117,12 +118,11 @@ providers:
             min_discount_pct: 90
             si_route:
               objective: price
-            
 
       - id: gpt-5.6-sol
         name: GPT-5.6 Sol (surplus)
         reasoning: true
-        input: [text, image]
+        input: [ text, image ]
         contextWindow: 1050000
         maxTokens: 128000
         compat:
@@ -134,7 +134,7 @@ providers:
       - id: gpt-6-astra
         name: GPT-6 Astra (surplus)
         reasoning: true
-        input: [text, image]
+        input: [ text, image ]
         contextWindow: 1050000
         maxTokens: 128000
         compat:
@@ -142,5 +142,3 @@ providers:
             min_discount_pct: 97
             si_route:
               objective: price
-
-              
