@@ -20,9 +20,6 @@ providers:
           objective: latency
           price_tolerance_pct: 1
           max_latency_ms: 100000
-    modelOverrides:
-      kimi-k3:
-        supportsTools: false
     models:
       - id: glm-5.3-flash
         name: GLM-5.3-Flash (surplus)
@@ -75,7 +72,7 @@ providers:
             si_route:
               objective: latency
               price_tolerance_pct: 10
-              
+               
       - id: gpt-5.6-terra
         name: GPT-5.6 Terra (surplus)
         reasoning: true
@@ -124,4 +121,5 @@ providers:
             min_discount_pct: 97
             si_route:
               objective: price
+
               
