@@ -78,10 +78,9 @@ providers:
         compat:
           extraBody:
             providers_blocked: [ inferhub ]
-            min_discount_pct: 70
+            min_discount_pct: 92
             si_route:
-              objective: latency
-              price_tolerance_pct: 10
+              objective: price
               
       - id: glm-5.3
         name: GLM 5.3 (surplus)
