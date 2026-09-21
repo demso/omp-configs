@@ -38,10 +38,10 @@ providers:
         maxTokens: 131072
         compat:
           extraBody:
+            providers_blocked: [inferhub]
             min_discount_pct: 60
             si_route:
-              objective: latency
-              price_tolerance_pct: 15
+              objective: price
 
       - id: deepseek-v4.1-flash
         name: DeepSeek V4.1 Flash (surplus)
@@ -59,15 +59,15 @@ providers:
       - id: kimi-k2.7-code
         name: Kimi K2.7 Code (surplus)
         reasoning: true
-        input: [text, image]
+        input: [text]
         contextWindow: 262144
         maxTokens: 262144
         compat:
           extraBody:
-            min_discount_pct: 70
+            providers_blocked: [inferhub]
+            min_discount_pct: 90
             si_route:
-              objective: latency
-              price_tolerance_pct: 10
+              objective: price
         
       - id: gpt-5.6-luna
         name: GPT-5.6 Luna (surplus)
