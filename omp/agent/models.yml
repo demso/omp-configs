@@ -83,18 +83,6 @@ providers:
               objective: latency
               price_tolerance_pct: 10
 
-      - id: glm-5.3
-        name: GLM 5.3 (surplus)
-        reasoning: true
-        input: [ text ]
-        contextWindow: 1050000
-        compat:
-          extraBody:
-            providers_blocked: [ inferhub ]
-            min_discount_pct: 88
-            si_route:
-              objective: price
-
       - id: gpt-5.6-terra
         name: GPT-5.6 Terra (surplus)
         reasoning: true
@@ -140,5 +128,29 @@ providers:
         compat:
           extraBody:
             min_discount_pct: 97
+            si_route:
+              objective: price
+
+      - id: gemini-3.8-flash
+        name: Gemini 3.8 Flash (surplus)
+        reasoning: true
+        input: [ text, image ]
+        contextWindow: 1048576
+        maxTokens: 65536
+        compat:
+          extraBody:
+            min_discount_pct: 60
+            si_route:
+              objective: price
+
+      - id: qwen-3-8-max
+        name: Qwen 3.8 Max (surplus)
+        reasoning: true
+        input: [ text ]
+        contextWindow: 1000000
+        maxTokens: 131072
+        compat:
+          extraBody:
+            min_discount_pct: 90
             si_route:
               objective: price

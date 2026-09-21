@@ -34,6 +34,8 @@ SHARED=(
   "omp/agent/models.yml .omp/agent/models.yml"
   "omp/agent/RULES.md .omp/agent/RULES.md"
   "omp/agent/managed-skills .omp/agent/managed-skills"
+  "omp/agent/skills .omp/agent/skills"
+  "omp/agent/agents .omp/agent/agents"
 )
 
 # Копирует дерево без шаблонов и без скрытых файлов (.git, .gitignore).
