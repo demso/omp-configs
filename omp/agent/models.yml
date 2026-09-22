@@ -23,6 +23,7 @@ providers:
     models:
       - id: jev-1.13
         name: JEV 1.13 (surplus)
+        contextWindow: 1048576
         compat:
           extraBody:
             min_discount_pct: 40
