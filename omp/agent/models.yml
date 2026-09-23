@@ -10,7 +10,7 @@ providers:
         name: GPT 5.6 Luna
   surplus:
     baseUrl: https://api.surplusintelligence.ai/v1
-    api: openai-responses
+    api: openai-completions
     apiKey: SURPLUS_KEY
     headers:
       X-Min-Discount: '40'
@@ -21,16 +21,6 @@ providers:
           objective: price
           max_latency_ms: 100000
     models:
-      - id: jev-1.13
-        name: JEV 1.13 (surplus)
-        contextWindow: 1048576
-        compat:
-          extraBody:
-            min_discount_pct: 40
-            si_route:
-              objective: latency
-              price_tolerance_pct: 15
-
       - id: glm-5.3-flash
         name: GLM-5.3-Flash (surplus)
         reasoning: true
@@ -72,13 +62,13 @@ providers:
 
       - id: gpt-5.6-luna
         name: GPT-5.6 Luna (surplus)
+        api: openai-responses
         reasoning: true
         input: [ text, image ]
         contextWindow: 1050000
         maxTokens: 128000
         compat:
           extraBody:
-            providers_blocked: [ inferhub ]
             min_discount_pct: 70
             si_route:
               objective: latency
@@ -92,7 +82,7 @@ providers:
         maxTokens: 128000
         compat:
           extraBody:
-            min_discount_pct: 90
+            min_discount_pct: 95
             si_route:
               objective: price
 
@@ -104,7 +94,7 @@ providers:
         maxTokens: 262144
         compat:
           extraBody:
-            min_discount_pct: 90
+            min_discount_pct: 95
             si_route:
               objective: price
 
@@ -116,7 +106,8 @@ providers:
         maxTokens: 128000
         compat:
           extraBody:
-            min_discount_pct: 90
+            min_discount_pct: 98
+            provider: [ inferhub ]
             si_route:
               objective: price
 
@@ -129,29 +120,25 @@ providers:
         compat:
           extraBody:
             min_discount_pct: 97
+            provider: [ inferhub ]
             si_route:
               objective: price
 
       - id: gemini-3.8-flash
         name: Gemini 3.8 Flash (surplus)
+        api: openai-completions
         reasoning: true
         input: [ text, image ]
         contextWindow: 1048576
         maxTokens: 65536
-        compat:
-          extraBody:
-            min_discount_pct: 60
-            si_route:
-              objective: price
+        headers:
+          X-Min-Discount: '60'
 
       - id: qwen-3-8-max
         name: Qwen 3.8 Max (surplus)
-        reasoning: true
+        api: openai-completions
         input: [ text ]
         contextWindow: 1000000
         maxTokens: 131072
-        compat:
-          extraBody:
-            min_discount_pct: 90
-            si_route:
-              objective: price
+        headers:
+          X-Min-Discount: '90'
