@@ -1,39 +1,15 @@
-providers:
-  webSearchOrder:
-    - duckduckgo
-    - zai
-    - jina
-    - kagi
-    - tavily
-    - brave
-    - parallel
-    - synthetic
-    - searxng
-    - startpage
-    - ecosia
-    - google
-    - mojeek
-    - public
-  webSearchExclude:
-    - perplexity
-    - gemini
-    - anthropic
-    - codex
-    - xai
-    - exa
-    - tinyfish
-    - firecrawl
-    - kimi
 modelRoles:
-  smol: surplus/deepseek-v4.1-flash:high
+  smol: surplus/gemini-3.8-flash:auto
   tiny: surplus/deepseek-v4.1-flash:low
-  default: surplus/gpt-5.6-luna:high
-  task: surplus/deepseek-v4.1-flash:auto
+  task: surplus/gemini-3.8-flash:auto
   advisor: zai/glm-5.3-flash:low
-  plan: surplus/gpt-5.6-sol:high
+  plan: surplus/gpt-6-sol:high
   commit: surplus/deepseek-v4.1-flash:low
-  slow: surplus/gpt-5.6-sol:high
-  jev: surplus/jev-1.13
+  slow: surplus/gpt-6-sol:auto
+  jev: surplus-jev/jev-1.13:off
+  web: web/duckduckgo
+  judge: surplus/gemini-3.8-flash
+  default: surplus/gpt-6-luna
 symbolPreset: nerd
 composer:
   shape: claude
@@ -50,6 +26,8 @@ task:
   isolation:
     enabled: false
   enableEffort: false
+  agentModelOverrides:
+    svelte-file-editor: surplus/deepseek-v4.1-flash
 sharpshooter:
   model: ""
 autolearn:
@@ -117,24 +95,41 @@ read:
   summarize:
     prose: true
 retry:
-  fallbackChains: {}
+  fallbackChains:
+    web:
+      - web/zai
+      - web/jina
+      - web/kagi
+      - web/tavily
+      - web/brave
+      - web/parallel
+      - web/synthetic
+      - web/searxng
+      - web/startpage
+      - web/ecosia
+      - web/google
+      - web/mojeek
+      - web/public
+      - web/ollama
 enabledProviders:
   - claude-plugins
 personality: pragmatic
 browser:
   relay: true
-disabledExtensions: []
+disabledExtensions:
+  []
 todo:
   reminders: false
 snapcompact:
   shape: auto
 tools:
   format: auto
-  xdevDocs: catalog
-enabledModels: []
+enabledModels:
+  []
 modelProviderOrder:
   - surplus
   - cheapference
   - opencode
   - zai
   - zai-balance
+defaultThinkingLevel: auto

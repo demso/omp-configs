@@ -14,12 +14,6 @@ providers:
     apiKey: SURPLUS_KEY
     headers:
       X-Min-Discount: '40'
-    compat:
-      extraBody:
-        si_route:
-          stream: true
-          objective: price
-          max_latency_ms: 100000
     models:
       - id: glm-5.3-flash
         name: GLM-5.3-Flash (surplus)
@@ -69,6 +63,8 @@ providers:
         maxTokens: 128000
         compat:
           extraBody:
+            stream: true
+            providers_blocked: [ inferhub ]
             min_discount_pct: 70
             si_route:
               objective: latency
@@ -124,6 +120,35 @@ providers:
             si_route:
               objective: price
 
+      - id: gpt-6-luna
+        name: GPT-6 Luna (surplus)
+        api: openai-responses
+        reasoning: true
+        input: [ text, image ]
+        contextWindow: 1050000
+        maxTokens: 128000
+        compat:
+          extraBody:
+            stream: true
+            providers_blocked: [ inferhub ]
+            min_discount_pct: 70
+            si_route:
+              objective: latency
+              price_tolerance_pct: 10
+
+      - id: gpt-6-sol
+        name: GPT-6 Sol (surplus)
+        reasoning: true
+        input: [ text, image ]
+        contextWindow: 1050000
+        maxTokens: 128000
+        compat:
+          extraBody:
+            min_discount_pct: 98
+            provider: [ inferhub ]
+            si_route:
+              objective: price
+
       - id: gemini-3.8-flash
         name: Gemini 3.8 Flash (surplus)
         api: openai-completions
@@ -133,6 +158,12 @@ providers:
         maxTokens: 65536
         headers:
           X-Min-Discount: '60'
+          X-SI-Route-Objective: 'latency'
+          X-SI-Route-Tolerance-Pct: '6'
+        compat:
+          supportsStore: false
+          extraBody:
+            providers_blocked: [ inferhub ]
 
       - id: qwen-3-8-max
         name: Qwen 3.8 Max (surplus)
