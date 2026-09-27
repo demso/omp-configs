@@ -377,6 +377,8 @@ configure_git_for_user() {
         git config --global merge.conflictStyle zdiff3
     runuser --user "${username}" -- env HOME="${home}" \
         git config --global side-by-side true	
+    runuser --user "${username}" -- env HOME="${home}" \
+        git config --global core.fileMode false
 }
 
 configure_git() {
