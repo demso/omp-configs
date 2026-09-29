@@ -8,6 +8,17 @@ providers:
         name: DS V4 Flash 0731
       - id: gpt-5.6-luna
         name: GPT 5.6 Luna
+  jev-decisions:
+    baseUrl: https://api.surplusintelligence.ai/v1
+    api: openrouter-decisions
+    apiKey: SURPLUS_KEY
+    headers:
+      X-Min-Discount: '40'
+    models:
+      - id: jev-1.13
+        name: JEV 1.13 TypeSafe (surplus decisions)
+        contextWindow: 32000
+        maxTokens: 4096
   surplus:
     baseUrl: https://api.surplusintelligence.ai/v1
     api: openai-completions
@@ -222,6 +233,13 @@ providers:
         compat:
           extraBody:
             min_discount_pct: 98
+            
+      - id: jev-1.13
+        name: JEV 1.13 TypeSafe (surplus)
+        reasoning: false
+        input: [ text ]
+        contextWindow: 32000
+        maxTokens: 4096
 
       - id: qwen-3-8-max
         name: Qwen 3.8 Max (surplus)
