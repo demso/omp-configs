@@ -89,7 +89,7 @@ providers:
         maxTokens: 262144
         compat:
           extraBody:
-            min_discount_pct: 95
+            min_discount_pct: 96
             si_route:
               objective: price
 
@@ -212,6 +212,16 @@ providers:
           X-Min-Discount: '95'
         compat:
           supportsStore: false
+          
+      - id: claude-opus-4.6
+        name: Claude Opus 4.6 (surplus)
+        reasoning: true
+        input: [ text, image ]
+        contextWindow: 1000000
+        maxTokens: 128000
+        compat:
+          extraBody:
+            min_discount_pct: 98
 
       - id: qwen-3-8-max
         name: Qwen 3.8 Max (surplus)
