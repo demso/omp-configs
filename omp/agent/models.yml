@@ -48,6 +48,16 @@ providers:
             si_route:
               objective: price
 
+      - id: minimax-m3
+        name: MiniMax M3 (surplus)
+        reasoning: false
+        input: [ text ]
+        contextWindow: 200000
+        maxTokens: 32768
+        compat:
+          extraBody:
+            min_discount_pct: 80
+
       - id: gpt-5.6-luna
         name: GPT-5.6 Luna (surplus)
         reasoning: true
@@ -115,8 +125,6 @@ providers:
         input: [ text, image ]
         contextWindow: 1050000
         maxTokens: 128000
-        headers:
-          X-Min-Discount: '70'
         compat:
           extraBody:
             providers_blocked: [ inferhub ]
@@ -134,6 +142,64 @@ providers:
             provider: [ inferhub ]
             si_route:
               objective: price
+
+      - id: gemini-3.1-flash-lite
+        name: Gemini 3.1 Flash Lite (surplus)
+        api: openai-completions
+        reasoning: false
+        input: [ text, image ]
+        contextWindow: 1048576
+        maxTokens: 65536
+        headers:
+          X-Min-Discount: '75'
+        compat:
+          supportsStore: false
+
+      - id: gemini-3-5-flash
+        name: Gemini 3.5 Flash (surplus)
+        api: openai-completions
+        reasoning: false
+        input: [ text, image ]
+        contextWindow: 1000000
+        maxTokens: 65536
+        headers:
+          X-Min-Discount: '96'
+        compat:
+          supportsStore: false
+
+      - id: qwen3.8-flash
+        name: Qwen3.8 Flash (surplus)
+        api: openai-completions
+        reasoning: true
+        input: [ text, image ]
+        contextWindow: 1000000
+        maxTokens: 131072
+        headers:
+          X-Min-Discount: '70'
+
+      - id: mistral-large-3
+        name: Mistral Large 3 (surplus)
+        api: openai-completions
+        reasoning: false
+        input: [ text, image ]
+        contextWindow: 256000
+        maxTokens: 32000
+        headers:
+          X-Min-Discount: '75'
+
+      - id: gemini-3.7-flash
+        name: Gemini 3.7 Flash (surplus)
+        api: openai-completions
+        reasoning: true
+        input: [ text, image ]
+        contextWindow: 1048576
+        maxTokens: 65536
+        headers:
+          X-Min-Discount: '90'
+        compat:
+          supportsStore: false
+          extraBody:
+            providers_blocked: [ inferhub ]
 
       - id: gemini-3.8-flash
         name: Gemini 3.8 Flash (surplus)
