@@ -12,8 +12,6 @@ providers:
     baseUrl: https://api.surplusintelligence.ai/v1
     api: openrouter-decisions
     apiKey: SURPLUS_KEY
-    headers:
-      X-Min-Discount: '40'
     models:
       - id: jev-1.13
         name: JEV 1.13 TypeSafe (surplus decisions)

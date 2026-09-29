@@ -1,8 +1,9 @@
 modelRoles:
+  judge: jev-decisions/jev-1.13
   smol: surplus/gemini-3.8-flash:medium
   tiny: surplus/deepseek-v4.1-flash:low
   task: surplus/glm-5.3-flash:low
-  advisor: zai/glm-5.3-flash:low
+  advisor: surplus/glm-5.3-flash:low
   plan: surplus/gpt-5.6-sol:high
   commit: surplus/deepseek-v4.1-flash:low
   slow: surplus/gpt-5.6-sol:high
@@ -24,6 +25,8 @@ task:
   isolation:
     enabled: false
   enableEffort: false
+  agentModelOverrides:
+    svelte-file-editor: surplus/deepseek-v4.1-flash
 sharpshooter:
   model: ""
 autolearn:
@@ -83,9 +86,6 @@ cycleOrder:
   - default
   - slow
 hideThinkingBlock: false
-disabledProviders:
-  - opencode
-  - zai-balance
 read:
   renderMarkdown: true
   summarize:
@@ -93,7 +93,6 @@ read:
 retry:
   fallbackChains:
     web:
-      - web/zai
       - web/jina
       - web/kagi
       - web/tavily
@@ -124,4 +123,5 @@ enabledModels:
   []
 modelProviderOrder:
   - surplus
+  - cheapference
 defaultThinkingLevel: auto
