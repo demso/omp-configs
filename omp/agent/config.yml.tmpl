@@ -9,6 +9,7 @@ modelRoles:
   slow: surplus/gpt-5.6-sol:high
   web: web/duckduckgo
   default: surplus/kimi-k3:high
+  image: surplus-images/venice-z-image-turbo
 symbolPreset: nerd
 composer:
   shape: claude
@@ -25,10 +26,6 @@ task:
   isolation:
     enabled: false
   enableEffort: false
-  agentModelOverrides:
-    svelte-file-editor: surplus/deepseek-v4.1-flash
-sharpshooter:
-  model: ""
 autolearn:
   enabled: false
   autoContinue: true
@@ -47,7 +44,6 @@ statusLine:
     - pr
     - subagents
   rightSegments:
-    - cost
     - context_pct
     - cache_hit
     - token_rate
@@ -92,6 +88,8 @@ read:
     prose: true
 retry:
   fallbackChains:
+    image:
+      - surplus-images/venice-qwen-image-2
     web:
       - web/jina
       - web/kagi
@@ -117,11 +115,10 @@ todo:
   reminders: false
 snapcompact:
   shape: auto
+generate_image:
+  enabled: true
 tools:
   format: auto
 enabledModels:
   []
-modelProviderOrder:
-  - surplus
-  - cheapference
 defaultThinkingLevel: auto
