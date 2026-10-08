@@ -5,7 +5,10 @@ This file is the authoritative user-level rule set for Oh My Pi sessions.
 ## Language
 
 - Think in English.
+
 - Respond to the user in Russian.
+
+- Answer concisely.
 
 ## Tests
 
