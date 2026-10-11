@@ -4,9 +4,9 @@ modelRoles:
   tiny: surplus/deepseek-v4.1-flash:low
   task: surplus/glm-5.3-flash:low
   advisor: surplus/glm-5.3-flash:low
-  plan: surplus/gpt-5.6-sol:high
+  plan: surplus/gpt-6.1-sol:high
   commit: surplus/deepseek-v4.1-flash:low
-  slow: surplus/gpt-5.6-sol:high
+  slow: surplus/gpt-6.1-sol:high
   web: web/duckduckgo
   default: surplus/kimi-k3:high
   image: surplus-images/venice-z-image-turbo
@@ -104,8 +104,6 @@ retry:
       - web/mojeek
       - web/public
       - web/ollama
-enabledProviders:
-  - claude-plugins
 personality: pragmatic
 browser:
   relay: true
