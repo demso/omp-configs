@@ -46,7 +46,7 @@
 
   ## File Placement
 
-  - Store project-related scripts, documentation, helpers, and reference artifacts under `./.omp/`.
+  - Store project-related scripts, documentation, helpers, and reference artifacts under `./.omp/`. Always add `.gitignore` with `*` in `./.omp/` directory to ignore folder and do not bloat project `.gitignore` file.
   - Store artifacts unrelated to the current project under `/mnt/d/data/agent/<group-name>/`.
 
   
