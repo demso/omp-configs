@@ -85,7 +85,7 @@ docs-mcp-server
 }
 ```
 
-После правки конфига перезапустить OMP: MCP-серверы монтируются при старте сессии, в уже открытой сессии их не будет.
+После правки конфига в уже открытой сессии выполнить `/mcp reload` (или `/mcp reconnect docs-mcp-server`) — полный перезапуск OMP не обязателен. Новые сессии подхватывают сервер автоматически.
 
 ## Скилы агента
 
@@ -147,7 +147,7 @@ done
 
 Ожидаемый результат: три строки `OK`.
 
-Финальная верификация — в **новой** OMP-сессии скилы `docs-manage`, `docs-search`, `fetch-url` присутствуют в списке доступных скилов, а инструменты `xd://mcp__docs_mcp_server_*` — в списке MCP-роутов. Скилы и MCP-серверы монтируются только при старте сессии: проверка из текущей сессии недостоверна.
+Финальная верификация — в **новой** OMP-сессии скилы `docs-manage`, `docs-search`, `fetch-url` присутствуют в списке доступных скилов, а инструменты `xd://mcp__docs_mcp_server_*` — в списке MCP-роутов. Скилы монтируются только при старте сессии; MCP-серверы можно перемонтировать в текущей сессии через `/mcp reload`.
 
 ## Доступные инструменты
 
@@ -182,7 +182,7 @@ ip -4 addr show eth0 | grep -oP 'inet \K[\d.]+'
 
 - IP WSL нестабилен: после перезагрузки WSL/Windows может смениться — узнавать заново.
 - Интероп WSL↔Windows (`interop.enabled = false` в `/etc/wsl.conf`) выключен, поэтому привычный `localhost:6280` из Windows не работает: проброс портов localhost в WSL2 включается только при активном интеропе. Доступ только по IP.
-- Процесс живёт до перезапуска WSL. Автозапуск не настроен — после рестарта запускать вручную (либо настроить systemd user unit, см. «Автозапуск»).
+- Без автозапуска процесс живёт до перезапуска WSL — настроить systemd user unit (см. «Автозапуск»). На эталонной машине автозапуск уже настроен (unit + linger).
 
 Проверка из WSL:
 
@@ -198,21 +198,28 @@ systemd user unit `~/.config/systemd/user/docs-mcp-server.service`:
 
 ```ini
 [Unit]
-Description=Docs MCP Server (grounded.tools)
-After=default.target
+Description=Docs MCP Server (@arabold/docs-mcp-server)
+After=network.target
 
 [Service]
-ExecStart=%h/.local/bin/docs-mcp-server
+Type=simple
+ExecStart=%h/.local/bin/docs-mcp-server server --protocol http --host 127.0.0.1 --port 6280 --quiet
 Restart=on-failure
+RestartSec=3
 
 [Install]
 WantedBy=default.target
 ```
 
+Важно: голый `ExecStart=.../docs-mcp-server` (без `server --protocol http`) под systemd **не работает** — без TTY режим `--protocol auto` выбирает stdio, процесс получает EOF на stdin и сразу завершается с кодом 0 (`Restart=on-failure` при этом не срабатывает, сервис остаётся `inactive (dead)`). Проверено экспериментально. Флаги `server --protocol http` обязательны.
+
 ```bash
 systemctl --user daemon-reload
 systemctl --user enable --now docs-mcp-server
+loginctl enable-linger $USER   # старт при загрузке WSL, без первого логина
 ```
+
+Управление: `systemctl --user status|restart|stop docs-mcp-server`, логи — `journalctl --user -u docs-mcp-server -f`.
 
 ## Векторный поиск (опционально)
 
@@ -238,7 +245,7 @@ OPENAI_API_KEY="sk-proj-..." docs-mcp-server
 
 1. Проверить валидность JSON: `python3 -m json.tool ~/.omp/agent/mcp.json`.
 2. Проверить, что сервер запущен: `curl -s http://127.0.0.1:6280/`.
-3. Полностью перезапустить OMP — серверы монтируются только при старте сессии.
+3. Выполнить `/mcp reload` в текущей сессии или перезапустить OMP.
 
 ### Web-интерфейс не открывается из Windows
 
@@ -253,14 +260,8 @@ OPENAI_API_KEY="sk-proj-..." docs-mcp-server
 ```json
 "docs-mcp-server": {
   "type": "stdio",
-  "command": "/usr/bin/node",
-  "args": [
-    "/home/agent/.local/lib/node_modules/@arabold/docs-mcp-server/dist/index.js",
-    "mcp",
-    "--protocol",
-    "stdio",
-    "--quiet"
-  ]
+  "command": "/home/abobapc/.local/bin/docs-mcp-server",
+  "args": ["mcp", "--quiet"]
 }
 ```
 
